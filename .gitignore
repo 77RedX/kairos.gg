@@ -1,2 +1,5 @@
 run.sh
 backup.py
+__pycache__/
+*.pyc
+.env
