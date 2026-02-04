@@ -7,7 +7,7 @@ import yt_dlp
 import asyncio
 from discord.ui import View, Button
 import time
-from views.info_view import InfoView, build_info_embed, format_uptime
+from UI.info_view import InfoView, build_info_embed, format_uptime
 
 
 # logging
