@@ -1,6 +1,8 @@
 import time
 import discord
-from discord.ui import View, Button
+from discord.ui import View
+
+# ---------- helpers ----------
 
 def format_uptime(seconds: float) -> str:
     mins, sec = divmod(int(seconds), 60)
@@ -21,13 +23,13 @@ def build_info_embed(interaction, page, bot, start_time):
     vc = interaction.guild.voice_client
     in_vc = "Yes" if vc and vc.is_connected() else "No"
 
-    commands_list = sorted(
-        [cmd.name for cmd in bot.tree.get_commands()]
-    )
+    # automatically includes NEW commands like /queue
+    commands_list = sorted(cmd.name for cmd in bot.tree.get_commands())
 
     PER_PAGE = 5
     total_pages = max(1, (len(commands_list) + PER_PAGE - 1) // PER_PAGE)
 
+    page = max(1, min(page, total_pages))
     start = (page - 1) * PER_PAGE
     end = start + PER_PAGE
     page_cmds = commands_list[start:end]
@@ -42,12 +44,14 @@ def build_info_embed(interaction, page, bot, start_time):
 
     embed.add_field(
         name=f"📜 Commands (Page {page}/{total_pages})",
-        value="\n".join(f"`/{c}`" for c in page_cmds),
+        value="\n".join(f"`/{c}`" for c in page_cmds) or "No commands",
         inline=False
     )
 
     return embed, total_pages
 
+
+# ---------- view ----------
 
 class InfoView(View):
     def __init__(self, interaction, bot, start_time, page=1):
@@ -60,37 +64,29 @@ class InfoView(View):
         _, self.total_pages = build_info_embed(
             interaction, page, bot, start_time
         )
-        self.update_buttons()
-
-    def update_buttons(self):
-        self.clear_items()
-
-        if self.page > 1:
-            self.add_item(
-                Button(label="◀ Prev", style=discord.ButtonStyle.secondary)
-            )
-        if self.page < self.total_pages:
-            self.add_item(
-                Button(label="Next ▶", style=discord.ButtonStyle.secondary)
-            )
+        self._update_button_state()
 
     async def interaction_check(self, interaction):
         return interaction.user == self.interaction.user
 
+    def _update_button_state(self):
+        self.prev.disabled = self.page <= 1
+        self.next.disabled = self.page >= self.total_pages
+
     @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
-    async def prev(self, interaction, button):
+    async def prev(self, interaction: discord.Interaction, button):
         self.page -= 1
         embed, _ = build_info_embed(
             self.interaction, self.page, self.bot, self.start_time
         )
-        self.update_buttons()
+        self._update_button_state()
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
-    async def next(self, interaction, button):
+    async def next(self, interaction: discord.Interaction, button):
         self.page += 1
         embed, _ = build_info_embed(
             self.interaction, self.page, self.bot, self.start_time
         )
-        self.update_buttons()
+        self._update_button_state()
         await interaction.response.edit_message(embed=embed, view=self)

@@ -4,16 +4,26 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import yt_dlp
-import asyncio
-from discord.ui import View, Button
 import time
 from UI.info_view import InfoView, build_info_embed, format_uptime
+from UI.queue_view import QueueView, build_queue_embed
+from queuemgr.qmgr import QueueManager
 
+os.makedirs("downloads", exist_ok=True) #making temp downloads directory
+for f in os.listdir("downloads"):
+    try:
+        os.remove(os.path.join("downloads", f))
+    except Exception:
+        pass
 
 # logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler("kairos.log"),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 BOT_START_TIME=time.time()
@@ -29,7 +39,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # yt-dlp / ffmpeg
 YDL_OPTIONS = {
-    "format": "bestaudio/best",
+    "format": "bestaudio[ext=m4a]/bestaudio",
+    "outtmpl": "downloads/%(id)s.%(ext)s",
     "quiet": True,
     "noplaylist": True,
 }
@@ -38,45 +49,12 @@ FFMPEG_OPTIONS = {
     "options": "-vn",
 }
 
-# queues
-music_queues = {}  # guild_id : list of (url, title) adding song by next update
+queue_mgr = QueueManager(bot, FFMPEG_OPTIONS)
 
-# helpers
+#helpers
 
-
-def get_queue(guild_id):
-    if guild_id not in music_queues:
-        music_queues[guild_id] = []
-    return music_queues[guild_id]
-
-async def play_next(interaction: discord.Interaction):
-    queue = get_queue(interaction.guild.id)
-    vc = interaction.guild.voice_client
-
-    if not queue:
-        await interaction.channel.send("📭 Queue finished.")
-        return
-
-    audio_url, title = queue.pop(0)
-
-    def after_play(err):
-        if err:
-            logger.error(f"Playback error: {err}")
-        fut = asyncio.run_coroutine_threadsafe(
-            play_next(interaction),
-            bot.loop
-        )
-        try:
-            fut.result()
-        except Exception as e:
-            logger.error(e)
-
-    vc.play(
-        discord.FFmpegPCMAudio(audio_url, **FFMPEG_OPTIONS),
-        after=after_play
-    )
-
-    await interaction.channel.send(f"🎵 Now playing: **{title}**")
+def is_url(text: str) -> bool:
+    return text.startswith("http://") or text.startswith("https://")
 
 # events
 @bot.event
@@ -108,7 +86,6 @@ async def info(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed, view=view)
 
-
 # voice
 @bot.tree.command(name="join", description="Join your voice channel")
 async def join(interaction: discord.Interaction):
@@ -136,13 +113,61 @@ async def leave(interaction: discord.Interaction):
         )
         return
 
-    get_queue(interaction.guild.id).clear()
+    queue_mgr.clear(interaction.guild.id)
+    queue_mgr.deleter.force_gc()
     await vc.disconnect()
     await interaction.response.send_message("Left the voice channel")
 
+@bot.tree.command(name="skip", description="Skip the current track")
+async def skip(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+
+    if not vc:
+        await interaction.response.send_message(
+            "I'm not in a voice channel!", ephemeral=True
+        )
+        return
+
+    if not vc.is_playing():
+        await interaction.response.send_message(
+            "Nothing is playing right now.", ephemeral=True
+        )
+        return
+
+    queue_mgr.skip(interaction.guild.id)
+    await interaction.response.send_message("⏭ Skipped.")
+
+@bot.tree.command(name="stop", description="Stop playing")
+async def stop(interaction: discord.Interaction):
+    vc=interaction.guild.voice_client
+    if not vc:
+        await interaction.response.send_message("I'm not in a voice channel!", ephemeral=True)
+        return
+    
+    queue_mgr.clear(interaction.guild.id)
+    queue_mgr.deleter.force_gc()
+
+    await interaction.response.send_message("Stopped playing.")
+
+#queue
+
+@bot.tree.command(name="queue", description="Show the music queue")
+async def queue(interaction: discord.Interaction):
+    current, q = queue_mgr.get_queue_snapshot(interaction.guild.id)
+
+    embed = build_queue_embed(
+        interaction.guild, current, q, page=1
+    )
+    view = QueueView(interaction, queue_mgr, page=1)
+
+    await interaction.response.send_message(
+        embed=embed,
+        view=view
+    )
+
 # play
 @bot.tree.command(name="play", description="Add a YouTube link to queue")
-@app_commands.describe(url="YouTube video URL")
+@app_commands.describe(url="YouTube link or song name")
 async def play(interaction: discord.Interaction, url: str):
     if not interaction.user.voice:
         await interaction.response.send_message(
@@ -158,23 +183,23 @@ async def play(interaction: discord.Interaction, url: str):
 
     try:
         with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(url, download=False)
-            audio_url = info["url"]
+            if is_url(url):
+                info = ydl.extract_info(url, download=True) 
+            else:
+                info = ydl.extract_info(f"ytsearch:{url}", download=True)
+                if not info["entries"]:
+                    await interaction.followup.send("No results found.")
+                    return
+                info = info["entries"][0]
+
+            filename=ydl.prepare_filename(info)
             title = info.get("title", "Unknown")
 
-        queue = get_queue(interaction.guild.id)
-        queue.append((audio_url, title))
-
-        if not vc.is_playing():
-            await play_next(interaction)
-        else:
-            await interaction.followup.send(
-                f"➕ Added to queue: **{title}**"
-            )
+        await queue_mgr.add(interaction, filename, title)
 
     except Exception:
         logger.exception("Play failed")
-        await interaction.followup.send("Failed to add this link.")
+        await interaction.followup.send("Failed to play.")
 
 # run
 bot.run(TOKEN)
