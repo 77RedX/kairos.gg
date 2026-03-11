@@ -4,11 +4,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import yt_dlp
+import asyncio
 import time
 from UI.info_view import InfoView, build_info_embed, format_uptime
 from UI.queue_view import QueueView, build_queue_embed
 from queuemgr.qmgr import QueueManager
-
 os.makedirs("downloads", exist_ok=True) #making temp downloads directory
 for f in os.listdir("downloads"):
     try:
@@ -19,7 +19,7 @@ for f in os.listdir("downloads"):
 # logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s",
     handlers=[
         logging.FileHandler("kairos.log"),
         logging.StreamHandler()
@@ -39,7 +39,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # yt-dlp / ffmpeg
 YDL_OPTIONS = {
-    "format": "bestaudio[ext=m4a]/bestaudio",
+    "format": "bestaudio/bestaudio",
     "outtmpl": "downloads/%(id)s.%(ext)s",
     "quiet": True,
     "noplaylist": True,
@@ -175,31 +175,43 @@ async def play(interaction: discord.Interaction, url: str):
         )
         return
 
+    await interaction.response.defer(thinking=True)
+    status_msg = await interaction.followup.send(f"🔎 Searching for **{url}**...")
     vc = interaction.guild.voice_client
     if not vc:
         vc = await interaction.user.voice.channel.connect()
 
-    await interaction.response.defer()
-
     try:
-        with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-            if is_url(url):
-                info = ydl.extract_info(url, download=True) 
-            else:
-                info = ydl.extract_info(f"ytsearch:{url}", download=True)
-                if not info["entries"]:
-                    await interaction.followup.send("No results found.")
-                    return
-                info = info["entries"][0]
+        loop = asyncio.get_running_loop()
 
-            filename=ydl.prepare_filename(info)
-            title = info.get("title", "Unknown")
+        def extract():
+            with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
+                if is_url(url):
+                    info = ydl.extract_info(url, download=True)
+                else:
+                    info = ydl.extract_info(f"ytsearch:{url}", download=True)
+                    if not info["entries"]:
+                        return None
+                    info = info["entries"][0]
 
-        await queue_mgr.add(interaction, filename, title)
+                filename = ydl.prepare_filename(info)
+                title = info.get("title", "Unknown")
+                video_url = info.get("webpage_url")
+                return filename, title, video_url
+
+        result = await loop.run_in_executor(None, extract)
+
+        if result is None:
+            await interaction.followup.send("No results found.")
+            return
+
+        filename, title, video_url = result
+        await status_msg.edit(content=f"➕ Added to queue: **{title}**")
+        await queue_mgr.add(interaction, filename, title, video_url)
 
     except Exception:
         logger.exception("Play failed")
-        await interaction.followup.send("Failed to play.")
+        await interaction.followup.send("Couldn't find song.")
 
 # run
 bot.run(TOKEN)
