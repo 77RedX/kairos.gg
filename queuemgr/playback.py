@@ -31,3 +31,31 @@ async def download_track(video_url):
             return filename, title
 
     return await loop.run_in_executor(None, _dl)
+
+# Ultra-fast search options (No downloading, just scraping titles)
+SEARCH_OPTIONS = {
+    "format": "bestaudio/best",
+    "extract_flat": True, 
+    "quiet": True,
+    "noplaylist": True,
+    "no_warnings": True,
+    "ignoreerrors": True,
+}
+
+async def fetch_search_results(query: str, limit: int = 5):
+    """Fetches top N search results from YouTube without downloading."""
+    loop = asyncio.get_running_loop()
+    
+    def _search():
+        with yt_dlp.YoutubeDL(SEARCH_OPTIONS) as ydl:
+            info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+            if info and "entries" in info:
+                return info["entries"][:limit]
+            return []
+            
+    try:
+        return await loop.run_in_executor(None, _search)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Search failed for '{query}': {e}")
+        return []

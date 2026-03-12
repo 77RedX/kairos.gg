@@ -7,9 +7,12 @@ from discord.ext import commands
 import yt_dlp
 import asyncio
 import time
-from UI.info_view import InfoView, build_info_embed, format_uptime
+from UI.info_view import InfoView, build_info_embed
 from UI.queue_view import QueueView, build_queue_embed
 from queuemgr.qmgr import QueueManager
+from queuemgr.playback import fetch_search_results
+from UI.search_view import SearchMenu
+
 os.makedirs("downloads", exist_ok=True) #making temp downloads directory
 for f in os.listdir("downloads"):
     try:
@@ -28,7 +31,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s",
     handlers=[
-        # CHANGED: Replaced FileHandler with RotatingFileHandler
         RotatingFileHandler(
             "kairos.log", 
             maxBytes=5 * 1024 * 1024, # 5 MB size limit per file
@@ -59,7 +61,7 @@ YDL_OPTIONS = {
     #"extract_flat": "in_playlist",    # Helps search speed and reliability
     "ignoreerrors": True,             # Don't crash if one search result is dead
     "no_warnings": True,
-    "nocheckcertificate": True,       # Helpful for your HPC SSL issues
+    "nocheckcertificate": True,
 }
 
 FFMPEG_OPTIONS = {
@@ -68,12 +70,65 @@ FFMPEG_OPTIONS = {
 
 queue_mgr = QueueManager(bot, FFMPEG_OPTIONS)
 
-#helpers
+# --- helpers ---
 
 def is_url(text: str) -> bool:
     return text.startswith("http://") or text.startswith("https://")
 
-# events
+async def process_play_request(interaction: discord.Interaction, url: str):
+    """Shared logic for both /play and /search to extract and queue music."""
+    if not interaction.user.voice:
+        if not interaction.response.is_done():
+            await interaction.response.send_message("Join a voice channel first", ephemeral=True)
+        else:
+            await interaction.followup.send("Join a voice channel first", ephemeral=True)
+        return
+
+    # Handle Discord interaction states gracefully
+    if not interaction.response.is_done():
+        await interaction.response.defer(thinking=True)
+        status_msg = await interaction.followup.send(f"🔎 Processing **{url}**...")
+    else:
+        status_msg = await interaction.followup.send(f"🔎 Processing **{url}**...")
+
+    vc = interaction.guild.voice_client
+    if not vc:
+        vc = await interaction.user.voice.channel.connect()
+
+    try:
+        loop = asyncio.get_running_loop()
+
+        def extract():
+            with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
+                if is_url(url):
+                    info = ydl.extract_info(url, download=False)
+                else:
+                    info = ydl.extract_info(f"ytsearch:{url}", download=False)
+                    if not info or not info.get("entries"):
+                        return None
+                    info = info["entries"][0]
+
+                filename = ydl.prepare_filename(info)
+                title = info.get("title", "Unknown")
+                video_url = info.get("webpage_url", url)
+                return filename, title, video_url
+
+        result = await loop.run_in_executor(None, extract)
+
+        if result is None:
+            await status_msg.edit(content="❌ No results found.")
+            return
+
+        filename, title, video_url = result
+        await status_msg.edit(content=f"➕ Added to queue: **{title}**")
+        await queue_mgr.add(interaction, filename, title, video_url)
+
+    except Exception:
+        logger.exception("Play failed")
+        await status_msg.edit(content="❌ Couldn't find song.")
+
+
+# --- events ---
 @bot.event
 async def on_ready():
     logger.info(f"Logged in as {bot.user}")
@@ -91,7 +146,7 @@ async def hello(interaction: discord.Interaction):
 @bot.tree.command(name="ping", description="Latency")
 async def ping(interaction: discord.Interaction):
     latency_ms=(bot.latency*1000)
-    await interaction.response.send_message(f"Latency :{latency_ms}")
+    await interaction.response.send_message(f"Latency :{latency_ms:.0f}ms")
 
 @bot.tree.command(name="info", description="Show bot info")
 async def info(interaction: discord.Interaction):
@@ -165,6 +220,7 @@ async def stop(interaction: discord.Interaction):
     queue_mgr.deleter.force_gc()
 
     await interaction.response.send_message("Stopped playing.")
+
 @bot.tree.command(name="pause", description="Pause the currently playing song")
 async def pause(interaction: discord.Interaction):
     vc = interaction.guild.voice_client
@@ -210,7 +266,6 @@ async def resume(interaction: discord.Interaction):
         )
 
 #queue
-
 @bot.tree.command(name="queue", description="Show the music queue")
 async def queue(interaction: discord.Interaction):
     current, q = queue_mgr.get_queue_snapshot(interaction.guild.id)
@@ -225,53 +280,31 @@ async def queue(interaction: discord.Interaction):
         view=view
     )
 
+@bot.tree.command(name="search", description="Search YouTube and pick a song")
+async def search_command(interaction: discord.Interaction, query: str):
+    await interaction.response.defer(ephemeral=True) 
+    
+    results = await fetch_search_results(query, limit=15)
+    
+    if not results:
+        await interaction.followup.send("❌ No results found for that query.")
+        return
+
+    # Call the new shared helper!
+    async def on_song_selected(inter: discord.Interaction, selected_url: str):
+        await process_play_request(inter, selected_url) 
+
+    view = SearchMenu(results, play_callback=on_song_selected)
+    await interaction.followup.send("Here are the top results:", view=view)
+
+
 # play
 @bot.tree.command(name="play", description="Add a YouTube link to queue")
 @app_commands.describe(url="YouTube link or song name")
 async def play(interaction: discord.Interaction, url: str):
-    if not interaction.user.voice:
-        await interaction.response.send_message(
-            "Join a voice channel first", ephemeral=True
-        )
-        return
+    # Pass off to the new shared helper!
+    await process_play_request(interaction, url)
 
-    await interaction.response.defer(thinking=True)
-    status_msg = await interaction.followup.send(f"🔎 Searching for **{url}**...")
-    vc = interaction.guild.voice_client
-    if not vc:
-        vc = await interaction.user.voice.channel.connect()
-
-    try:
-        loop = asyncio.get_running_loop()
-
-        def extract():
-            with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-                if is_url(url):
-                    info = ydl.extract_info(url, download=False)
-                else:
-                    info = ydl.extract_info(f"ytsearch:{url}", download=False)
-                    if not info["entries"]:
-                        return None
-                    info = info["entries"][0]
-
-                filename = ydl.prepare_filename(info)
-                title = info.get("title", "Unknown")
-                video_url = info.get("webpage_url")
-                return filename, title, video_url
-
-        result = await loop.run_in_executor(None, extract)
-
-        if result is None:
-            await interaction.followup.send("No results found.")
-            return
-
-        filename, title, video_url = result
-        await status_msg.edit(content=f"➕ Added to queue: **{title}**")
-        await queue_mgr.add(interaction, filename, title, video_url)
-
-    except Exception:
-        logger.exception("Play failed")
-        await interaction.followup.send("Couldn't find song.")
 
 # run
 bot.run(TOKEN)
