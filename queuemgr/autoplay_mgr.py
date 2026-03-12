@@ -61,8 +61,14 @@ async def fill_autoplay(state, guild_id):
         if candidate_url in history:
             continue
 
+        if not candidate_title or not isinstance(candidate_title, str):
+            continue
+
         norm = _normalize_title(candidate_title)
         
+        if not isinstance(norm, str):
+            norm = str(norm)
+            
         if norm == curr_norm:
             continue
 
