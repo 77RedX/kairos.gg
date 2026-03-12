@@ -65,7 +65,7 @@ class QueueManager:
             # 3. Handle old file cleanup BEFORE we overwrite the state
             old_track = self.state.current_track.get(gid)
             if old_track:
-                self.deleter.enqueue(old_track[0])
+                self.deleter.enqueue(old_track)
 
             # 4. Update state with the NEW track
             self.state.current_track[gid] = (filename, title, url)
@@ -123,7 +123,7 @@ class QueueManager:
         # Clean up the currently playing file immediately
         track = self.state.current_track.pop(gid, None)
         if track:
-            self.deleter.enqueue(track[0])
+            self.deleter.enqueue(track)
 
     def get_queue_snapshot(self, guild_id):
         track = self.state.current_track.get(guild_id)

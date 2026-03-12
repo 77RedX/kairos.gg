@@ -1,5 +1,6 @@
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -27,8 +28,14 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s",
     handlers=[
-        logging.FileHandler("kairos.log"),
-        logging.StreamHandler()
+        # CHANGED: Replaced FileHandler with RotatingFileHandler
+        RotatingFileHandler(
+            "kairos.log", 
+            maxBytes=5 * 1024 * 1024, # 5 MB size limit per file
+            backupCount=5,            # Keep a maximum of 5 older log files
+            encoding="utf-8"
+        ),
+        logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)

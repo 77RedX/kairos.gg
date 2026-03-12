@@ -12,12 +12,14 @@ class LazyDeleter:
         self.gc_running = False
         self.lock = threading.Lock()
 
-    def enqueue(self, filename):
-        if not filename:
+    def enqueue(self, track_info):
+        """Expects a tuple: (filename, title, url)"""
+        if not track_info or not track_info[0]:
             return
 
         with self.lock:
-            self.delete_queue.add(filename)
+            # Add the entire tuple to the set
+            self.delete_queue.add(track_info)
             if len(self.delete_queue) >= self.DELETE_THRESHOLD:
                 self._start_gc()
 
@@ -37,18 +39,30 @@ class LazyDeleter:
                 with self.lock:
                     if not self.delete_queue:
                         break
-                    filenames = list(self.delete_queue)
+                    # Convert set of tuples to a list to iterate over safely
+                    items = list(self.delete_queue)
 
                 deleted_any = False
 
-                for filename in filenames:
+                for item in items:
+                    filename, title, url = item
+                    
                     try:
+                        # ==========================================
+                        # 🧠 ML PROCESSING PIPELINE (FUTURE UPGRADE)
+                        # ==========================================
+                        # 1. Check if 'url' exists in your SQLite DB.
+                        # 2. If not, analyze 'filename' to get Valence/Arousal.
+                        # 3. Save (url, title, valence, arousal) to DB.
+                        # logger.info(f"Analyzed {title}: V=0.58, A=0.74")
+                        # ==========================================
+
                         if os.path.exists(filename):
                             os.remove(filename)
-                            logger.info(f"GC deleted: {filename}")
+                            logger.info(f"GC processed and deleted: {filename}")
 
                         with self.lock:
-                            self.delete_queue.discard(filename)
+                            self.delete_queue.discard(item)
 
                         deleted_any = True
 
@@ -57,15 +71,14 @@ class LazyDeleter:
                         continue
 
                     except Exception as e:
-                        logger.warning(f"GC error deleting {filename}: {e}")
+                        logger.warning(f"GC error processing/deleting {filename}: {e}")
                         with self.lock:
-                            self.delete_queue.discard(filename)
+                            self.delete_queue.discard(item)
 
                 if not deleted_any:
                     time.sleep(1)
 
                 with self.lock:
-                    # CHANGED: Only break if the queue is completely empty
                     if not self.delete_queue: 
                         break
         finally:
