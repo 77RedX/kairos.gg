@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class LazyDeleter:
-    def __init__(self, threshold=50):
+    def __init__(self, threshold=20):
         self.DELETE_THRESHOLD = threshold
         self.delete_queue = set()
         self.gc_running = False
@@ -18,7 +18,6 @@ class LazyDeleter:
 
         with self.lock:
             self.delete_queue.add(filename)
-
             if len(self.delete_queue) >= self.DELETE_THRESHOLD:
                 self._start_gc()
 
@@ -38,7 +37,6 @@ class LazyDeleter:
                 with self.lock:
                     if not self.delete_queue:
                         break
-
                     filenames = list(self.delete_queue)
 
                 deleted_any = False
@@ -55,7 +53,7 @@ class LazyDeleter:
                         deleted_any = True
 
                     except PermissionError:
-                        # FFmpeg still holding the file
+                        # FFmpeg still holding the file, we will try again next loop
                         continue
 
                     except Exception as e:
@@ -67,7 +65,8 @@ class LazyDeleter:
                     time.sleep(1)
 
                 with self.lock:
-                    if len(self.delete_queue) < self.DELETE_THRESHOLD:
+                    # CHANGED: Only break if the queue is completely empty
+                    if not self.delete_queue: 
                         break
         finally:
             self.gc_running = False

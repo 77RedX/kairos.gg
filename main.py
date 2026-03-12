@@ -17,6 +17,12 @@ for f in os.listdir("downloads"):
         pass
 
 # logging
+import sys
+
+# Force the Windows terminal to output UTF-8 so it doesn't crash on print
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s",
@@ -35,6 +41,7 @@ if not TOKEN:
 
 # intents
 intents = discord.Intents.default()
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # yt-dlp / ffmpeg
@@ -148,6 +155,49 @@ async def stop(interaction: discord.Interaction):
     queue_mgr.deleter.force_gc()
 
     await interaction.response.send_message("Stopped playing.")
+@bot.tree.command(name="pause", description="Pause the currently playing song")
+async def pause(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+
+    if not vc:
+        await interaction.response.send_message(
+            "I'm not in a voice channel!", ephemeral=True
+        )
+        return
+
+    if vc.is_playing():
+        vc.pause()
+        await interaction.response.send_message("⏸ **Paused.**")
+    elif vc.is_paused():
+        await interaction.response.send_message(
+            "The music is already paused.", ephemeral=True
+        )
+    else:
+        await interaction.response.send_message(
+            "Nothing is playing right now.", ephemeral=True
+        )
+
+@bot.tree.command(name="resume", description="Resume the paused song")
+async def resume(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+
+    if not vc:
+        await interaction.response.send_message(
+            "I'm not in a voice channel!", ephemeral=True
+        )
+        return
+
+    if vc.is_paused():
+        vc.resume()
+        await interaction.response.send_message("▶️ **Resumed.**")
+    elif vc.is_playing():
+        await interaction.response.send_message(
+            "The music is already playing.", ephemeral=True
+        )
+    else:
+        await interaction.response.send_message(
+            "There is no paused music to resume.", ephemeral=True
+        )
 
 #queue
 
@@ -187,9 +237,9 @@ async def play(interaction: discord.Interaction, url: str):
         def extract():
             with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
                 if is_url(url):
-                    info = ydl.extract_info(url, download=True)
+                    info = ydl.extract_info(url, download=False)
                 else:
-                    info = ydl.extract_info(f"ytsearch:{url}", download=True)
+                    info = ydl.extract_info(f"ytsearch:{url}", download=False)
                     if not info["entries"]:
                         return None
                     info = info["entries"][0]
