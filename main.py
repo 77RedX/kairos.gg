@@ -54,10 +54,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # yt-dlp / ffmpeg
 YDL_OPTIONS = {
     "format": "bestaudio/best",        # Standardize with playback.py
-    "outtmpl": "downloads/%(id)s.%(ext)s",
     "quiet": True,
     "noplaylist": True,
-    "extract_flat": "in_playlist",    # Helps search speed and reliability
+    #"extract_flat": "in_playlist",    # Helps search speed and reliability
     "ignoreerrors": True,             # Don't crash if one search result is dead
     "no_warnings": True,
     "nocheckcertificate": True,       # Helpful for your HPC SSL issues
