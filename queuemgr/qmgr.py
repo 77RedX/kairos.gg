@@ -36,7 +36,15 @@ class QueueManager:
             return
 
         vc = guild.voice_client
-        if not vc:
+        if not vc or not vc.is_connected():
+            logger.info(f"Voice client dead or disconnected. Halting play_next.")
+            # Clear the queue so the domino effect stops instantly
+            self.clear(gid)
+            self.deleter.force_gc()
+            
+            # Make sure we unlock the processing state before we leave
+            if gid in self._processing:
+                self._processing.discard(gid)
             return
 
         # Lock the queue so other commands don't interrupt the download process
