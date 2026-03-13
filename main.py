@@ -69,6 +69,7 @@ FFMPEG_OPTIONS = {
 }
 
 queue_mgr = QueueManager(bot, FFMPEG_OPTIONS)
+active_text_channels = {}
 
 # --- helpers ---
 
@@ -76,6 +77,9 @@ def is_url(text: str) -> bool:
     return text.startswith("http://") or text.startswith("https://")
 
 async def process_play_request(interaction: discord.Interaction, url: str):
+
+    active_text_channels[interaction.guild.id] = interaction.channel
+
     """Shared logic for both /play and /search to extract and queue music."""
     if not interaction.user.voice:
         if not interaction.response.is_done():
@@ -156,10 +160,17 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
         non_bot_members = [m for m in vc.channel.members if not m.bot]
         
         if len(non_bot_members) == 0:
-            logger.info(f"All members have left the Voice Channel. Auto-disconnecting.")
+            logger.info(f"Bot left alone in {member.guild.name}. Auto-disconnecting.")
             queue_mgr.clear(member.guild.id)
             queue_mgr.deleter.force_gc()
             await vc.disconnect()
+
+            text_channel = active_text_channels.get(member.guild.id)
+            if text_channel:
+                try:
+                    await text_channel.send("👋 **All users disconnected.**")
+                except Exception as e:
+                    logger.error(f"Could not send disconnect message: {e}")
 
 # basic test
 @bot.tree.command(name="hello", description="Say hi")
@@ -184,6 +195,7 @@ async def info(interaction: discord.Interaction):
 # voice
 @bot.tree.command(name="join", description="Join your voice channel")
 async def join(interaction: discord.Interaction):
+    active_text_channels[interaction.guild.id] = interaction.channel
     if not interaction.user.voice:
         await interaction.response.send_message(
             "You are not in a voice channel.", ephemeral=True
