@@ -138,6 +138,29 @@ async def on_ready():
     except Exception:
         logger.exception("Command sync failed")
 
+@bot.event
+async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    """Handles auto-cleanup when the bot is disconnected or left alone in a VC."""
+    vc = member.guild.voice_client
+
+    # SCENARIO 1: The bot itself was disconnected (by Discord, by a network drop, or kicked)
+    if member == bot.user and before.channel and not after.channel:
+        logger.info(f"Bot was disconnected from {member.guild.name}. Clearing queue.")
+        queue_mgr.clear(member.guild.id)
+        queue_mgr.deleter.force_gc()
+        return
+
+    # SCENARIO 2: A user left the channel. Is the bot alone now?
+    if vc and vc.channel:
+        # Count members in the bot's channel who are NOT bots
+        non_bot_members = [m for m in vc.channel.members if not m.bot]
+        
+        if len(non_bot_members) == 0:
+            logger.info(f"All members have left the Voice Channel. Auto-disconnecting.")
+            queue_mgr.clear(member.guild.id)
+            queue_mgr.deleter.force_gc()
+            await vc.disconnect()
+
 # basic test
 @bot.tree.command(name="hello", description="Say hi")
 async def hello(interaction: discord.Interaction):
