@@ -4,17 +4,21 @@ import os
 
 if os.name == 'posix':
     _tmpl = "/dev/shm/kairos_%(id)s.%(ext)s"
+    _js_config = {
+        "node": {
+            "path": "/home/btech1037224/bin/node"
+        }
+    }
 else:
     _tmpl = "downloads/%(id)s.%(ext)s"
-
-_js_runtime = "node"
+    _js_config = {"node": {}}
 
 YDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
     "outtmpl": _tmpl,
     "quiet": True,
-    "js_runtimes": {_js_runtime: {}},
+    "js_runtimes": _js_config,
     "concurrent_fragment_downloads": 10,
     "http_chunk_size": 10485760,
     "source_address": "0.0.0.0",

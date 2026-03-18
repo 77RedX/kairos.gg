@@ -5,7 +5,16 @@ import os
 
 logger = logging.getLogger(__name__)
 
-_js_runtime = "node"
+if os.name == "posix":
+    # HPC Linux: We tell the API exactly where the executable is
+    _js_config = {
+        "node": {
+            "path": "/home/btech1037224/bin/node"
+        }
+    }
+else:
+    # Windows: Node is in your PATH, so empty config works
+    _js_config = {"node": {}}
 
 # --- OPTIMIZED SEARCH OPTIONS ---
 YDL_OPTIONS = {
@@ -15,7 +24,7 @@ YDL_OPTIONS = {
     "playlist_items": "1-16",      # Tells the YouTube API directly to only send the first 15
     "ignoreerrors": True,          # Skip deleted/private videos instantly
     "no_warnings": True,
-    "js_runtimes": {_js_runtime: {}},
+    "js_runtimes": _js_config,
 }
 
 def _normalize_title(title: str):
