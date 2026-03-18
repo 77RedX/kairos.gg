@@ -21,7 +21,7 @@ YDL_OPTIONS = {
     "extractor_args": {
         "youtube": {
             "remote_components": ["ejs:github"],
-            "player_client": ["web", "ios"]
+            "player_client": ["android", "ios"]
         }
     },
 }
