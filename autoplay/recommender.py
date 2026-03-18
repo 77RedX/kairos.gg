@@ -4,13 +4,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# --- OPTIMIZED SEARCH OPTIONS ---
 YDL_OPTIONS = {
     "quiet": True,
     "skip_download": True,
-    "extract_flat": True, # CRITICAL: This stops yt-dlp from downloading metadata for all 50 songs
+    "extract_flat": "in_playlist", # STRICTER than True: forces flat extraction only inside playlists
+    "playlist_items": "1-16",      # Tells the YouTube API directly to only send the first 15
+    "ignoreerrors": True,          # Skip deleted/private videos instantly
+    "no_warnings": True,
     "js_runtimes": {
         "node": {}
-    }
+    },
 }
 
 def _normalize_title(title: str):
@@ -25,7 +29,6 @@ def _normalize_title(title: str):
 
 def extract_video_id(url: str) -> str:
     """Safely extracts the 11-character YouTube video ID from any URL format."""
-    # Matches watch?v=ID, youtu.be/ID, shorts/ID, etc.
     match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})(?:\?|&|/|$)", url)
     if match:
         return match.group(1)
@@ -49,7 +52,10 @@ def get_related(video_url):
             return []
 
         candidates = []
-        for e in entries:
+        
+        # THE KILL SWITCH: We slice the entries list [:20] just in case yt-dlp 
+        # ignored our limits and pulled 1000. 
+        for e in entries[:20]: 
             if not e:
                 continue
 
@@ -59,11 +65,20 @@ def get_related(video_url):
             if not url or not title:
                 continue
 
-            # Ensure we have a full URL (sometimes flat extraction returns just the ID/path)
+            # Ensure we have a full URL
             if not url.startswith("http"):
                 url = f"https://www.youtube.com/watch?v={url}"
+                
+            # SAFETY CHECK: Don't add the exact same song that just played!
+            # YouTube Mixes almost always put the source song as track #1
+            if video_id in url:
+                continue
 
             candidates.append((url, title))
+            
+            # HARD STOP at 15 valid candidates
+            if len(candidates) >= 15:
+                break
 
         return candidates
         

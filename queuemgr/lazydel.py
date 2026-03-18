@@ -13,12 +13,11 @@ class LazyDeleter:
         self.lock = threading.Lock()
 
     def enqueue(self, track_info):
-        """Expects a tuple: (filename, title, url)"""
-        if not track_info or not track_info[0]:
+        """Expects a tuple (filename, title, url) OR just a filename string"""
+        if not track_info:
             return
 
         with self.lock:
-            # Add the entire tuple to the set
             self.delete_queue.add(track_info)
             if len(self.delete_queue) >= self.DELETE_THRESHOLD:
                 self._start_gc()
@@ -39,27 +38,22 @@ class LazyDeleter:
                 with self.lock:
                     if not self.delete_queue:
                         break
-                    # Convert set of tuples to a list to iterate over safely
                     items = list(self.delete_queue)
 
                 deleted_any = False
 
                 for item in items:
-                    filename, title, url = item
+                    # --- FIX: Safely unpack based on type ---
+                    if isinstance(item, (list, tuple)):
+                        filename = item[0]
+                    else:
+                        filename = item
+                    # ----------------------------------------
                     
                     try:
-                        # ==========================================
-                        # 🧠 ML PROCESSING PIPELINE (FUTURE UPGRADE)
-                        # ==========================================
-                        # 1. Check if 'url' exists in your SQLite DB.
-                        # 2. If not, analyze 'filename' to get Valence/Arousal.
-                        # 3. Save (url, title, valence, arousal) to DB.
-                        # logger.info(f"Analyzed {title}: V=0.58, A=0.74")
-                        # ==========================================
-
                         if os.path.exists(filename):
                             os.remove(filename)
-                            logger.info(f"GC processed and deleted: {filename}")
+                            logger.info(f"🗑️ GC processed and deleted: {filename}")
 
                         with self.lock:
                             self.delete_queue.discard(item)
@@ -67,7 +61,7 @@ class LazyDeleter:
                         deleted_any = True
 
                     except PermissionError:
-                        # FFmpeg still holding the file, we will try again next loop
+                        # FFmpeg still holding the file, try again next loop
                         continue
 
                     except Exception as e:

@@ -6,6 +6,7 @@ from queuemgr.queue_state import QueueState
 from queuemgr.playback import download_track
 from queuemgr.lazydel import LazyDeleter
 from queuemgr.autoplay_mgr import fill_autoplay
+from queuemgr.processor import InferenceQueue
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class QueueManager:
         self.ffmpeg_options = ffmpeg_options
         self.state = QueueState()
         self.deleter = LazyDeleter(threshold=20)
-        
+        self.inference_queue = InferenceQueue(self.deleter)
         # NEW: A lock to prevent multiple songs from trying to play at the exact same time
         self._processing = set() 
 
@@ -70,10 +71,14 @@ class QueueManager:
             # 2. Download the track
             filename, title = await download_track(url)
 
-            # 3. Handle old file cleanup BEFORE we overwrite the state
+            # 3. Handle old file cleanup
             old_track = self.state.current_track.get(gid)
             if old_track:
-                self.deleter.enqueue(old_track)
+                # FIX: Use 'old_' prefix so we don't overwrite the newly downloaded song variables!
+                old_fname, old_title, old_url = old_track
+                song_info = {"title": old_title, "url": old_url}
+                # Send to processing first!
+                self.inference_queue.enqueue(old_fname, song_info, gid)
 
             # 4. Update state with the NEW track
             self.state.current_track[gid] = (filename, title, url)

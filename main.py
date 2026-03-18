@@ -12,6 +12,8 @@ from UI.queue_view import QueueView, build_queue_embed
 from queuemgr.qmgr import QueueManager
 from queuemgr.playback import fetch_search_results
 from UI.search_view import SearchMenu
+from database.database import init_db, get_db_stats
+import sys
 
 os.makedirs("downloads", exist_ok=True) #making temp downloads directory
 for f in os.listdir("downloads"):
@@ -21,18 +23,23 @@ for f in os.listdir("downloads"):
         pass
 
 # logging
-import sys
 
 # Force the Windows terminal to output UTF-8 so it doesn't crash on print
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+LOG_FILE = os.path.join(LOG_DIR, "kairos.log")
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s",
     handlers=[
         RotatingFileHandler(
-            "kairos.log", 
+            LOG_FILE, 
             maxBytes=5 * 1024 * 1024, # 5 MB size limit per file
             backupCount=5,            # Keep a maximum of 5 older log files
             encoding="utf-8"
@@ -136,6 +143,9 @@ async def process_play_request(interaction: discord.Interaction, url: str):
 @bot.event
 async def on_ready():
     logger.info(f"Logged in as {bot.user}")
+
+    queue_mgr.inference_queue.start()
+    logger.info("✅ Background audio workers started!")
     try:
         synced = await bot.tree.sync()
         logger.info(f"Synced {len(synced)} command(s)")
@@ -191,6 +201,37 @@ async def info(interaction: discord.Interaction):
         interaction, bot=bot, start_time=BOT_START_TIME, page=1
     )
     await interaction.response.send_message(embed=embed, view=view)
+
+@bot.tree.command(name="brain", description="Check the size and current vibe of KaiROS's memory.")
+async def brain(interaction: discord.Interaction):
+    count, avg_v, avg_a = get_db_stats()
+
+    # Determine the "Global Vibe" text based on the quadrants
+    if count == 0:
+        vibe_str = "Brain is empty. Play some music!"
+    elif avg_v > 0 and avg_a > 0:
+        vibe_str = "Happy & Energetic ☀️"
+    elif avg_v > 0 and avg_a <= 0:
+        vibe_str = "Peaceful & Chill 🍃"
+    elif avg_v <= 0 and avg_a > 0:
+        vibe_str = "Aggressive & Intense 🔥"
+    else:
+        vibe_str = "Melancholic & Dark 🌧️"
+
+    # Build a sleek Discord Embed
+    embed = discord.Embed(
+        title="🧠 KaiROS Neural Memory",
+        description="Here is what I have learned from listening to your queues.",
+        color=discord.Color.purple()
+    )
+    
+    embed.add_field(name="Total Songs Learned", value=f"**{count}** unique tracks", inline=False)
+    
+    if count > 0:
+        embed.add_field(name="Global Vibe", value=vibe_str, inline=True)
+        embed.add_field(name="Average Coordinates", value=f"V: {avg_v:.2f} | A: {avg_a:.2f}", inline=True)
+    
+    await interaction.response.send_message(embed=embed)
 
 # voice
 @bot.tree.command(name="join", description="Join your voice channel")
@@ -342,4 +383,6 @@ async def play(interaction: discord.Interaction, url: str):
 
 
 # run
-bot.run(TOKEN)
+if __name__ == "__main__":
+    init_db()
+    bot.run(TOKEN)
