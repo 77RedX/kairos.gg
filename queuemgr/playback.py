@@ -4,14 +4,10 @@ import os
 
 if os.name == 'posix':
     _tmpl = "/dev/shm/kairos_%(id)s.%(ext)s"
-    _js_config = {
-        "node": {
-            "path": "/home/btech1037224/bin/node"
-        }
-    }
 else:
     _tmpl = "downloads/%(id)s.%(ext)s"
-    _js_config = {"node": {}}
+
+_js_config = {"node": {}}
 
 YDL_OPTIONS = {
     "format": "bestaudio/best",

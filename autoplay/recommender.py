@@ -5,16 +5,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-if os.name == "posix":
-    # HPC Linux: We tell the API exactly where the executable is
-    _js_config = {
-        "node": {
-            "path": "/home/btech1037224/bin/node"
-        }
-    }
-else:
-    # Windows: Node is in your PATH, so empty config works
-    _js_config = {"node": {}}
+_js_config = {"node": {}}
 
 # --- OPTIMIZED SEARCH OPTIONS ---
 YDL_OPTIONS = {

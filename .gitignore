@@ -1,4 +1,6 @@
 run.sh
+*.sh
+*.bat
 backup.py
 __pycache__/
 *.pyc
