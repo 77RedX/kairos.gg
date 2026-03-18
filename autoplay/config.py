@@ -2,11 +2,11 @@
 import os
 
 # Paths
-AUDIO_DIR = "/home/akshaygautam4451/Kairos/dataset/MEMD_audio"
-ANNOT_DIR = "/home/akshaygautam4451/Kairos/dataset/annotations/dynamic"
-OUT_DIR = "/home/akshaygautam4451/Kairos/outputs"
+#AUDIO_DIR = "/home/akshaygautam4451/Kairos/dataset/MEMD_audio"
+#ANNOT_DIR = "/home/akshaygautam4451/Kairos/dataset/annotations/dynamic"
+#OUT_DIR = "/home/akshaygautam4451/Kairos/outputs"
 
-os.makedirs(OUT_DIR, exist_ok=True)
+#os.makedirs(OUT_DIR, exist_ok=True)
 
 # Audio params
 SAMPLE_RATE = 22050
