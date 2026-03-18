@@ -18,6 +18,12 @@ YDL_OPTIONS = {
     "concurrent_fragment_downloads": 10,
     "http_chunk_size": 10485760,
     "source_address": "0.0.0.0",
+    "extractor_args": {
+        "youtube": {
+            "remote_components": ["ejs:github"],
+            "player_client": ["web", "ios"]
+        }
+    },
 }
 
 async def download_track(video_url):
