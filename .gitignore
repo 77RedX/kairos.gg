@@ -6,3 +6,5 @@ __pycache__/
 run.bat
 downloads
 kairos.log
+logs/
+database/*.db

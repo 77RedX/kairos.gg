@@ -75,3 +75,85 @@ def get_db_stats():
     except Exception as e:
         logger.error(f"❌ Failed to get DB stats: {e}")
         return 0, 0.0, 0.0
+    
+def get_recommendations(target_v, target_a, current_url, limit=5):
+    """Finds the closest vibe matches using squared Euclidean distance."""
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cursor = conn.cursor()
+            # We use (V2 - V1)^2 + (A2 - A1)^2 directly in the SQL query!
+            # It is lightning fast and perfectly accurate for sorting nearest neighbors.
+            cursor.execute("""
+                SELECT title, youtube_url, valence_avg, arousal_avg,
+                       ((valence_avg - ?) * (valence_avg - ?) + (arousal_avg - ?) * (arousal_avg - ?)) as dist
+                FROM track_logs
+                WHERE youtube_url != ? 
+                ORDER BY dist ASC
+                LIMIT ?
+            """, (target_v, target_v, target_a, target_a, current_url, limit))
+            
+            return cursor.fetchall()
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to fetch recommendations: {e}")
+        return []
+
+def get_track_by_vibe(vibe: str):
+    """Pulls a random song from the database based on the 4 emotional quadrants."""
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cursor = conn.cursor()
+            
+            # Map the vibe to your ML model's coordinates
+            if vibe == "hype":      # Happy & Energetic
+                condition = "valence_avg > 0 AND arousal_avg > 0"
+            elif vibe == "chill":   # Happy & Calm
+                condition = "valence_avg > 0 AND arousal_avg <= 0"
+            elif vibe == "intense": # Dark & Energetic
+                condition = "valence_avg <= 0 AND arousal_avg > 0"
+            else:                   # Melancholic & Slow
+                condition = "valence_avg <= 0 AND arousal_avg <= 0"
+            
+            # Fetch 1 random song that matches the condition
+            cursor.execute(f"""
+                SELECT title, youtube_url, valence_avg, arousal_avg 
+                FROM track_logs 
+                WHERE {condition}
+                ORDER BY RANDOM() LIMIT 1
+            """)
+            return cursor.fetchone()
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to fetch vibe track: {e}")
+        return None
+
+def get_seed_track(current_url: str, guild_id: str):
+    """Fetches the current track's coordinates, falling back to the last played track."""
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            cursor = conn.cursor()
+            
+            # First, try to find the CURRENT song
+            cursor.execute("""
+                SELECT title, youtube_url, valence_avg, arousal_avg 
+                FROM track_logs 
+                WHERE youtube_url = ? LIMIT 1
+            """, (current_url,))
+            seed_track = cursor.fetchone()
+
+            # FALLBACK: If current isn't analyzed, grab the last successfully analyzed song
+            if not seed_track:
+                logger.info("Current song not analyzed yet. Falling back to last played.")
+                cursor.execute("""
+                    SELECT title, youtube_url, valence_avg, arousal_avg 
+                    FROM track_logs 
+                    WHERE guild_id = ? 
+                    ORDER BY played_at DESC LIMIT 1
+                """, (str(guild_id),))
+                seed_track = cursor.fetchone()
+
+            return seed_track
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to fetch seed track: {e}")
+        return None

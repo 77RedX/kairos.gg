@@ -107,6 +107,7 @@ class QueueManager:
             self._processing.discard(gid)
             
             await channel.send(f"🎵 Now playing: **{title}**")
+            self.bot.loop.create_task(self.prefetch_next(guild))
 
             # 7. Pre-fill autoplay in the background for the NEXT round
             if not user_q and len(auto_q) < 6: 
@@ -117,6 +118,32 @@ class QueueManager:
             self._processing.discard(gid)
             # Try to force the next song if this one crashed
             asyncio.create_task(self.play_next(guild, channel))
+    
+    async def prefetch_next(self, guild):
+        """Looks ahead in the queue and downloads the next track in the background."""
+        # Give the autoplay manager a couple of seconds to fetch related 
+        # YouTube links if the queue just emptied out.
+        await asyncio.sleep(5) 
+        
+        gid = guild.id
+        user_q = self.state.user_q(gid)
+        auto_q = self.state.auto_q(gid)
+        
+        # Peek at the next URL without popping it off the list
+        next_url = None
+        if user_q:
+            next_url = user_q[0][0]
+        elif auto_q:
+            next_url = auto_q[0][0]
+            
+        if next_url:
+            logger.info("💿 Pre-fetching next track for seamless playback...")
+            try:
+                # This downloads the file and caches it in your downloads/ folder.
+                # When play_next() eventually asks for it, it will load instantly!
+                await download_track(next_url)
+            except Exception as e:
+                logger.error(f"❌ Failed to pre-fetch track: {e}")
 
     def skip(self, gid):
         vc = self.bot.get_guild(gid).voice_client
@@ -139,11 +166,12 @@ class QueueManager:
             self.deleter.enqueue(track)
 
     def get_queue_snapshot(self, guild_id):
-        track = self.state.current_track.get(guild_id)
-        current_title = track[1] if track else None
+        # This is the (filename, title, url) tuple
+        track = self.state.current_track.get(guild_id) 
 
+        # We return the whole track tuple for 'current', not just the title
         queue_titles = (
             [title for _, title in self.state.user_q(guild_id)] +
             [title for _, title in self.state.auto_q(guild_id)]
         )
-        return current_title, queue_titles
+        return track, queue_titles

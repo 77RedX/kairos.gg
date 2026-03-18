@@ -12,8 +12,10 @@ from UI.queue_view import QueueView, build_queue_embed
 from queuemgr.qmgr import QueueManager
 from queuemgr.playback import fetch_search_results
 from UI.search_view import SearchMenu
-from database.database import init_db, get_db_stats
+from database.database import init_db, get_db_stats, get_recommendations, get_seed_track
 import sys
+from UI.vibe_selector import VibeSelector
+from UI.recommend_view import RecommendView
 
 os.makedirs("downloads", exist_ok=True) #making temp downloads directory
 for f in os.listdir("downloads"):
@@ -373,6 +375,61 @@ async def search_command(interaction: discord.Interaction, query: str):
     view = SearchMenu(results, play_callback=on_song_selected)
     await interaction.followup.send("Here are the top results:", view=view)
 
+@bot.tree.command(name="recommend", description="Get 5 vibe-matched songs based on what is currently playing.")
+async def recommend(interaction: discord.Interaction):
+    await interaction.response.defer() 
+
+    # 1. Get the song currently playing in this specific server
+    current, _ = queue_mgr.get_queue_snapshot(interaction.guild.id)
+    
+    if not current:
+        await interaction.followup.send("⚠️ There is no music playing right now to base recommendations on!")
+        return
+        
+    current_url = current[2]
+
+    # 2. Ask the database for the coordinates (Abstracted beautifully!)
+    seed_track = get_seed_track(current_url, str(interaction.guild.id))
+
+    if not seed_track:
+        await interaction.followup.send("🧠 I'm still analyzing the vibe of this song. Try again in 5 seconds!")
+        return
+
+    seed_title, seed_url, target_v, target_a = seed_track
+
+    # 3. Fetch the 5 closest matches from the database
+    recs = get_recommendations(target_v, target_a, seed_url, limit=5)
+
+    if not recs:
+        await interaction.followup.send("I haven't learned enough similar songs yet to make a match!")
+        return
+
+    # 4. Build the Embed UI
+    embed = discord.Embed(
+        title="🎧 KaiROS Vibe Match",
+        description=f"Based on: **{seed_title}**\n*(V: {target_v:.2f} | A: {target_a:.2f})*",
+        color=discord.Color.gold()
+    )
+
+    urls_to_queue = []
+    for i, rec in enumerate(recs, 1):
+        rec_title, rec_url, rec_v, rec_a, dist = rec
+        urls_to_queue.append(rec_url)
+        
+        display_title = (rec_title[:50] + '...') if len(rec_title) > 53 else rec_title
+        embed.add_field(
+            name=f"{i}. {display_title}",
+            value=f"[Listen]({rec_url}) | *Vibe: {rec_v:.2f}, {rec_a:.2f}*",
+            inline=False
+        )
+
+    # 5. The Callback Bridge to trigger playback
+    async def trigger_playback(btn_interaction: discord.Interaction, url: str):
+        await process_play_request(btn_interaction, url)
+
+    # 6. Send with the specialized View
+    view = RecommendView(urls=urls_to_queue, play_callback=trigger_playback)
+    await interaction.followup.send(embed=embed, view=view)
 
 # play
 @bot.tree.command(name="play", description="Add a YouTube link to queue")
@@ -381,6 +438,22 @@ async def play(interaction: discord.Interaction, url: str):
     # Pass off to the new shared helper!
     await process_play_request(interaction, url)
 
+@bot.tree.command(name="start", description="Pick a vibe and let KaiROS choose the first song.")
+async def start_session(interaction: discord.Interaction):
+    
+    # This is the "Bridge" function. The UI will pass the URL back here!
+    async def trigger_playback(btn_interaction: discord.Interaction, url: str):
+        # Pass the button interaction and the URL directly into your existing player logic!
+        await process_play_request(btn_interaction, url)
+
+    embed = discord.Embed(
+        title="🎛️ Booting up KaiROS",
+        description="How are we feeling today? Choose a starting vibe below:",
+        color=discord.Color.blurple()
+    )
+    
+    # Send the embed and attach the View, passing our bridge function to it
+    await interaction.response.send_message(embed=embed, view=VibeSelector(play_callback=trigger_playback))
 
 # run
 if __name__ == "__main__":
