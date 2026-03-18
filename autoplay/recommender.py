@@ -5,10 +5,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-if os.name == 'posix':
-    _js_runtime = "quickjs"
-else:
-    _js_runtime = "node"
+_js_runtime = "node"
 
 # --- OPTIMIZED SEARCH OPTIONS ---
 YDL_OPTIONS = {

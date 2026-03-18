@@ -4,10 +4,10 @@ import os
 
 if os.name == 'posix':
     _tmpl = "/dev/shm/kairos_%(id)s.%(ext)s"
-    _js_runtime = "quickjs"
 else:
     _tmpl = "downloads/%(id)s.%(ext)s"
-    _js_runtime = "node"
+
+_js_runtime = "node"
 
 YDL_OPTIONS = {
     "format": "bestaudio/best",
