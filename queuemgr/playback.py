@@ -4,15 +4,17 @@ import os
 
 if os.name == 'posix':
     _tmpl = "/dev/shm/kairos_%(id)s.%(ext)s"
+    _js_runtime = "quickjs"
 else:
     _tmpl = "downloads/%(id)s.%(ext)s"
+    _js_runtime = "node"
 
 YDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
     "outtmpl": _tmpl,
     "quiet": True,
-    "js_runtimes": {"node": {}},
+    "js_runtimes": {_js_runtime: {}},
     "concurrent_fragment_downloads": 10,
     "http_chunk_size": 10485760,
     "source_address": "0.0.0.0",

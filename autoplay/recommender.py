@@ -1,8 +1,14 @@
 import yt_dlp
 import re
 import logging
+import os
 
 logger = logging.getLogger(__name__)
+
+if os.name == 'posix':
+    _js_runtime = "quickjs"
+else:
+    _js_runtime = "node"
 
 # --- OPTIMIZED SEARCH OPTIONS ---
 YDL_OPTIONS = {
@@ -12,9 +18,7 @@ YDL_OPTIONS = {
     "playlist_items": "1-16",      # Tells the YouTube API directly to only send the first 15
     "ignoreerrors": True,          # Skip deleted/private videos instantly
     "no_warnings": True,
-    "js_runtimes": {
-        "node": {}
-    },
+    "js_runtimes": {_js_runtime: {}},
 }
 
 def _normalize_title(title: str):
