@@ -12,7 +12,7 @@ def build_queue_embed(guild, current, queue, page):
     if current:
         embed.add_field(
             name="🔊 Now Playing",
-            value=f"**{current}**",
+            value=f"**{current[1]}**",
             inline=False
         )
     else:

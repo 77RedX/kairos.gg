@@ -44,12 +44,12 @@ async def download_track(video_url):
                 
                 filename = ydl.prepare_filename(info)
                 title = info.get("title")
-                return filename, title
+                return filename, title, info
         except yt_dlp.utils.DownloadError as e:
             # Check if it was our specific duration error
             if "This song file can't be fetched" in str(e):
                 logger.warning(f"Skipped {video_url}: Exceeds 30 mins limit.")
-                return None, None
+                return None, None, None
             # Otherwise, re-raise the actual error (like copyright or network issues)
             logger.error(f"Download failed for {video_url}: {e}")
             raise e

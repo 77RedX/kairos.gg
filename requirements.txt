@@ -14,3 +14,4 @@ pandas>=2.0.0        # For reading CSV annotation files
 
 # --- Utilities ---
 tqdm>=4.65.0         # For terminal progress bars
+lingua-language-detector

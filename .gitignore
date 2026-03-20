@@ -10,3 +10,4 @@ downloads
 kairos.log
 logs/
 database/*.db
+migrate.py

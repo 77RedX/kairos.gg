@@ -36,13 +36,14 @@ async def fill_autoplay(state, guild_id):
     if not track:
         return
 
-    _, title, url = track
+    _, title, url, *_ = track
     history = state.history_set(guild_id)
-    queued_urls = {q_url for q_url, _ in auto_q}
+    
+    # --- FIX 1: Safe tuple extraction ---
+    queued_urls = {item[0] for item in auto_q}
 
     logger.info(f"Autoplay queue size before fill: {len(auto_q)}")
 
-    # Lists to hold our raw candidates before we mix them
     db_candidates = []
     yt_candidates = []
 
@@ -55,7 +56,6 @@ async def fill_autoplay(state, guild_id):
             if seed_track:
                 _, seed_url, target_v, target_a, seed_lang, seed_artist, seed_year = seed_track
                 
-                # Fetch more than we strictly need so we have variety
                 raw_db_recs = get_recommendations(target_v, target_a, seed_url, seed_lang, seed_artist, seed_year, limit=10)
                 
                 for rec_title, rec_url, _, _, score in raw_db_recs:
@@ -74,7 +74,7 @@ async def fill_autoplay(state, guild_id):
             related = await loop.run_in_executor(None, functools.partial(get_related, url))
             if related:
                 yt_candidates = list(related)
-                random.shuffle(yt_candidates) # Shuffle YT to keep things fresh
+                random.shuffle(yt_candidates) 
         except Exception as e:
             logger.error(f"Autoplay YT fetch failed for {url}: {e}")
 
@@ -85,7 +85,6 @@ async def fill_autoplay(state, guild_id):
     
     while len(auto_q) < 15 and (db_candidates or yt_candidates):
         
-        # Decide which source to pull from based on your set weight
         if db_candidates and yt_candidates:
             use_kairos = random.random() < KAIROS_WEIGHT
         elif db_candidates:
@@ -93,17 +92,15 @@ async def fill_autoplay(state, guild_id):
         else:
             use_kairos = False
 
-        # Pull from KaiROS Brain
         if use_kairos:
             cand_url, cand_title, score = db_candidates.pop(0)
             
-            # DB tracks are already trusted, so we skip the bad word filter
-            auto_q.append((cand_url, cand_title))
+            # --- FIX 2: Append empty dict {} ---
+            auto_q.append((cand_url, cand_title, {}))
             queued_urls.add(cand_url)
-            history.add(cand_url) # Temporarily add to history so we don't double-pick
+            history.add(cand_url) 
             logger.info(f"🧠 DB Match Added: {cand_title} (Score: {score:.3f})")
 
-        # Pull from YouTube
         else:
             cand_url, cand_title = yt_candidates.pop(0)
             
@@ -117,7 +114,8 @@ async def fill_autoplay(state, guild_id):
             if norm == curr_norm or BAD_WORDS_PATTERN.search(norm):
                 continue
 
-            auto_q.append((cand_url, cand_title))
+            # --- FIX 3: Append empty dict {} ---
+            auto_q.append((cand_url, cand_title, {}))
             queued_urls.add(cand_url)
             history.add(cand_url)
             logger.info(f"🌐 YT Discovery Added: {cand_title}")

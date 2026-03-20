@@ -129,7 +129,7 @@ async def process_play_request(interaction: discord.Interaction, url: str):
                 filename = ydl.prepare_filename(info)
                 title = info.get("title", "Unknown")
                 video_url = info.get("webpage_url", url)
-                return filename, title, video_url
+                return filename, title, video_url, info
 
         result = await loop.run_in_executor(None, extract)
 
@@ -140,9 +140,9 @@ async def process_play_request(interaction: discord.Interaction, url: str):
             await status_msg.edit(content="❌ No results found.")
             return
 
-        filename, title, video_url = result
+        filename, title, video_url, full_info = result
         await status_msg.edit(content=f"➕ Added to queue: **{title}**")
-        await queue_mgr.add(interaction, filename, title, video_url)
+        await queue_mgr.add(interaction, filename, title, video_url, full_info)
 
     except Exception:
         logger.exception("Play failed")
@@ -164,19 +164,29 @@ async def on_ready():
 
 @bot.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-    """Handles auto-cleanup when the bot is disconnected or left alone in a VC."""
+    """Handles auto-cleanup and auto-reconnects."""
     vc = member.guild.voice_client
 
-    # SCENARIO 1: The bot itself was disconnected (by Discord, by a network drop, or kicked)
+    # SCENARIO 1: The bot was disconnected
     if member == bot.user and before.channel and not after.channel:
-        logger.info(f"Bot was disconnected from {member.guild.name}. Clearing queue.")
-        queue_mgr.clear(member.guild.id)
-        queue_mgr.deleter.force_gc()
+        # Check if this was an INTENTIONAL disconnect (user ran /stop or /leave)
+        if member.guild.id in queue_mgr.state.stopped:
+            logger.info(f"Bot cleanly left {member.guild.name}. Queue cleared.")
+        else:
+            # ⚠️ This is a 1006 Network Drop! 
+            logger.warning(f"⚠️ Abnormal disconnect detected in {member.guild.name}! Attempting to auto-reconnect...")
+            try:
+                await before.channel.connect()
+                logger.info("✅ Auto-reconnect successful!")
+                return # Don't clear the queue!
+            except Exception as e:
+                logger.error(f"❌ Failed to auto-reconnect: {e}")
+                queue_mgr.clear(member.guild.id)
+                queue_mgr.deleter.force_gc()
         return
 
     # SCENARIO 2: A user left the channel. Is the bot alone now?
     if vc and vc.channel:
-        # Count members in the bot's channel who are NOT bots
         non_bot_members = [m for m in vc.channel.members if not m.bot]
         
         if len(non_bot_members) == 0:
@@ -188,7 +198,7 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
             text_channel = active_text_channels.get(member.guild.id)
             if text_channel:
                 try:
-                    await text_channel.send("👋 **All users disconnected.**")
+                    await text_channel.send("👋 **All users disconnected. Leaving voice.**")
                 except Exception as e:
                     logger.error(f"Could not send disconnect message: {e}")
 
@@ -400,7 +410,7 @@ async def recommend(interaction: discord.Interaction):
     seed_track = get_seed_track(current_url, str(interaction.guild.id))
 
     if not seed_track:
-        await interaction.followup.send("🧠 I'm still analyzing the vibe of this song. Try again in 5 seconds!")
+        await interaction.followup.send("🧠 I'm still analyzing the vibe of this song.")
         return
 
     # --- NEW: Unpack all 7 values returned by the updated get_seed_track ---
