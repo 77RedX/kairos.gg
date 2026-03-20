@@ -71,6 +71,13 @@ class QueueManager:
             # 2. Download the track
             filename, title = await download_track(url)
 
+            if filename is None:
+                await channel.send("❌ This song file can't be fetched.")
+                self._processing.discard(gid)
+                # Skip this track and immediately try to play the next one in the queue
+                asyncio.create_task(self.play_next(guild, channel))
+                return
+
             # 3. Handle old file cleanup
             old_track = self.state.current_track.get(gid)
             if old_track:

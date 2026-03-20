@@ -71,6 +71,7 @@ YDL_OPTIONS = {
     "ignoreerrors": True,             # Don't crash if one search result is dead
     "no_warnings": True,
     "nocheckcertificate": True,
+    "js_runtimes": {"node": {}},
 }
 
 FFMPEG_OPTIONS = {
@@ -121,6 +122,10 @@ async def process_play_request(interaction: discord.Interaction, url: str):
                         return None
                     info = info["entries"][0]
 
+                duration = info.get("duration")
+                if duration and duration > 1800: # 1800 seconds = 30 minutes
+                    return "TOO_LONG"
+
                 filename = ydl.prepare_filename(info)
                 title = info.get("title", "Unknown")
                 video_url = info.get("webpage_url", url)
@@ -128,7 +133,10 @@ async def process_play_request(interaction: discord.Interaction, url: str):
 
         result = await loop.run_in_executor(None, extract)
 
-        if result is None:
+        if result == "TOO_LONG":
+            await status_msg.edit(content="❌ This song file can't be fetched.")
+            return
+        elif result is None:
             await status_msg.edit(content="❌ No results found.")
             return
 
@@ -388,17 +396,18 @@ async def recommend(interaction: discord.Interaction):
         
     current_url = current[2]
 
-    # 2. Ask the database for the coordinates (Abstracted beautifully!)
+    # 2. Ask the database for the coordinates AND the new metadata
     seed_track = get_seed_track(current_url, str(interaction.guild.id))
 
     if not seed_track:
         await interaction.followup.send("🧠 I'm still analyzing the vibe of this song. Try again in 5 seconds!")
         return
 
-    seed_title, seed_url, target_v, target_a = seed_track
+    # --- NEW: Unpack all 7 values returned by the updated get_seed_track ---
+    seed_title, seed_url, target_v, target_a, seed_lang, seed_artist, seed_year = seed_track
 
-    # 3. Fetch the 5 closest matches from the database
-    recs = get_recommendations(target_v, target_a, seed_url, limit=5)
+    # 3. Fetch the 5 closest matches using the Advanced Weighted Algorithm
+    recs = get_recommendations(target_v, target_a, seed_url, seed_lang, seed_artist, seed_year, limit=5)
 
     if not recs:
         await interaction.followup.send("I haven't learned enough similar songs yet to make a match!")
@@ -406,20 +415,23 @@ async def recommend(interaction: discord.Interaction):
 
     # 4. Build the Embed UI
     embed = discord.Embed(
-        title="🎧 KaiROS Vibe Match",
+        title="🎧 KaiROS Advanced Vibe Match",
         description=f"Based on: **{seed_title}**\n*(V: {target_v:.2f} | A: {target_a:.2f})*",
         color=discord.Color.gold()
     )
 
     urls_to_queue = []
     for i, rec in enumerate(recs, 1):
-        rec_title, rec_url, rec_v, rec_a, dist = rec
+        # --- NEW: Unpack the 5 values returned by our new SQL query ---
+        rec_title, rec_url, rec_v, rec_a, score = rec 
         urls_to_queue.append(rec_url)
         
         display_title = (rec_title[:50] + '...') if len(rec_title) > 53 else rec_title
+        
+        # We display the "Match Score" so users can see the AI's confidence!
         embed.add_field(
             name=f"{i}. {display_title}",
-            value=f"[Listen]({rec_url}) | *Vibe: {rec_v:.2f}, {rec_a:.2f}*",
+            value=f"[Listen]({rec_url}) | *Vibe: {rec_v:.2f}, {rec_a:.2f} | Score: {score:.3f}*",
             inline=False
         )
 

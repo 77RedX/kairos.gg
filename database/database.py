@@ -23,23 +23,27 @@ def init_db():
                     arousal_avg REAL,
                     valence_std REAL,
                     arousal_std REAL,
-                    played_at TIMESTAMP
+                    played_at TIMESTAMP,
+                    default_audio_language TEXT DEFAULT 'unknown',
+                    artist_name TEXT DEFAULT 'unknown',
+                    duration_secs INTEGER DEFAULT 0,
+                    release_year INTEGER DEFAULT 0
                 )
             ''')
             conn.commit()
-            logger.info("✅ Database initialized with Average and Std Dev columns.")
+            logger.info("✅ Database initialized with streamlined metadata schema.")
     except Exception as e:
         logger.error(f"❌ Database init failed: {e}")
 
-def log_track_emotion(guild_id, title, youtube_url, v_avg, a_avg, v_std, a_std):
+def log_track_emotion(guild_id, title, youtube_url, v_avg, a_avg, v_std, a_std, language='unknown', artist='unknown', duration=0, year=0):
     try:
         with sqlite3.connect(DB_FILE) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT OR REPLACE INTO track_logs 
-                (guild_id, title, youtube_url, valence_avg, arousal_avg, valence_std, arousal_std, played_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (str(guild_id), title, youtube_url, v_avg, a_avg, v_std, a_std, datetime.now()))
+                (guild_id, title, youtube_url, valence_avg, arousal_avg, valence_std, arousal_std, played_at, default_audio_language, artist_name, duration_secs, release_year)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (str(guild_id), title, youtube_url, v_avg, a_avg, v_std, a_std, datetime.now(), language, artist, duration, year))
             conn.commit()
     except Exception as e:
         logger.error(f"❌ Failed to log track to DB: {e}")
@@ -76,28 +80,40 @@ def get_db_stats():
         logger.error(f"❌ Failed to get DB stats: {e}")
         return 0, 0.0, 0.0
     
-def get_recommendations(target_v, target_a, current_url, limit=5):
-    """Finds the closest vibe matches using squared Euclidean distance."""
+def get_recommendations(target_v, target_a, current_url, seed_lang, seed_artist, seed_year, limit=5):
+    """Fetches recommendations using Vibe Distance weighted by Language, Artist, and Year."""
     try:
         with sqlite3.connect(DB_FILE) as conn:
             cursor = conn.cursor()
-            # We use (V2 - V1)^2 + (A2 - A1)^2 directly in the SQL query!
-            # It is lightning fast and perfectly accurate for sorting nearest neighbors.
+            
+            # The Magic SQL Query: Euclidean distance minus bonus points
             cursor.execute("""
                 SELECT title, youtube_url, valence_avg, arousal_avg,
-                       ((valence_avg - ?) * (valence_avg - ?) + (arousal_avg - ?) * (arousal_avg - ?)) as dist
+                    -- 1. Base Vibe Distance (Smaller is better)
+                    ((valence_avg - ?) * (valence_avg - ?) + (arousal_avg - ?) * (arousal_avg - ?))
+                    
+                    -- 2. Language Bonus (Subtracts 0.05 from distance if matching)
+                    - CASE WHEN default_audio_language = ? AND default_audio_language != 'unknown' THEN 0.05 ELSE 0 END
+                    
+                    -- 3. Artist Bonus (Subtracts 0.15 from distance if matching)
+                    - CASE WHEN artist_name = ? AND artist_name != 'unknown' THEN 0.15 ELSE 0 END
+                    
+                    -- 4. Era Bonus (Subtracts 0.02 if released within 3 years of each other)
+                    - CASE WHEN ABS(release_year - ?) <= 3 AND release_year != 0 THEN 0.02 ELSE 0 END
+                    
+                    as weighted_score
                 FROM track_logs
                 WHERE youtube_url != ? 
-                ORDER BY dist ASC
+                ORDER BY weighted_score ASC
                 LIMIT ?
-            """, (target_v, target_v, target_a, target_a, current_url, limit))
+            """, (target_v, target_v, target_a, target_a, seed_lang, seed_artist, seed_year, current_url, limit))
             
             return cursor.fetchall()
             
     except Exception as e:
         logger.error(f"❌ Failed to fetch recommendations: {e}")
         return []
-
+    
 def get_track_by_vibe(vibe: str):
     """Pulls a random song from the database based on the 4 emotional quadrants."""
     try:
@@ -128,28 +144,23 @@ def get_track_by_vibe(vibe: str):
         return None
 
 def get_seed_track(current_url: str, guild_id: str):
-    """Fetches the current track's coordinates, falling back to the last played track."""
+    """Fetches the current track's coordinates AND its new metadata."""
     try:
         with sqlite3.connect(DB_FILE) as conn:
             cursor = conn.cursor()
             
-            # First, try to find the CURRENT song
-            cursor.execute("""
-                SELECT title, youtube_url, valence_avg, arousal_avg 
+            # Update the query to grab the new metadata columns
+            query = """
+                SELECT title, youtube_url, valence_avg, arousal_avg, default_audio_language, artist_name, release_year 
                 FROM track_logs 
-                WHERE youtube_url = ? LIMIT 1
-            """, (current_url,))
+            """
+            
+            cursor.execute(query + "WHERE youtube_url = ? LIMIT 1", (current_url,))
             seed_track = cursor.fetchone()
 
-            # FALLBACK: If current isn't analyzed, grab the last successfully analyzed song
             if not seed_track:
                 logger.info("Current song not analyzed yet. Falling back to last played.")
-                cursor.execute("""
-                    SELECT title, youtube_url, valence_avg, arousal_avg 
-                    FROM track_logs 
-                    WHERE guild_id = ? 
-                    ORDER BY played_at DESC LIMIT 1
-                """, (str(guild_id),))
+                cursor.execute(query + "WHERE guild_id = ? ORDER BY played_at DESC LIMIT 1", (str(guild_id),))
                 seed_track = cursor.fetchone()
 
             return seed_track
