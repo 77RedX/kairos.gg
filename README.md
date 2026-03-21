@@ -76,7 +76,6 @@ This allows KaiROS to **blend your favorites with intelligent discoveries**, cre
 
 ## 🏗️ Tech Stack
 
-```txt
 Language        → Python 3.10+
 Framework       → discord.py
 Audio Fetching  → yt-dlp
@@ -89,7 +88,6 @@ Database        → SQLite3
 
 ## 🔗 How to Use KaiROS
 
-```txt
 - You don’t need to host your own instance to experience the Vibe-Engine. Join the official development and testing hub:
 
 - Join the Discord Server: Join KaiROS Official (Ensure you use a permanent invite link!)
