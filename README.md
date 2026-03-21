@@ -90,7 +90,7 @@ This allows KaiROS to **blend your favorites with intelligent discoveries**, cre
 
 - You don’t need to host your own instance to experience the Vibe-Engine. Join the official development and testing hub:
 
-- Join the Discord Server: Join KaiROS Official (Ensure you use a permanent invite link!)
+- Join the Discord Server: [Join KaiROS Official](https://discord.gg/ZztmZ5JFCQ)
 
 - Invite the Bot: Once inside, use the /invite command or click the Bot's profile to add it to your own server.
 
