@@ -13,12 +13,19 @@ class LazyDeleter:
         self.lock = threading.Lock()
 
     def enqueue(self, track_info):
-        """Expects a tuple (filename, title, url) OR just a filename string"""
+        """Expects a tuple (filename, title, url, ...) OR just a filename string"""
         if not track_info:
             return
 
+        # --- FIX: Extract ONLY the filename string right away ---
+        if isinstance(track_info, (list, tuple)):
+            filename = track_info[0]
+        else:
+            filename = track_info
+
         with self.lock:
-            self.delete_queue.add(track_info)
+            # Now we are only adding a pure string to the set! No more hash errors.
+            self.delete_queue.add(filename)
             if len(self.delete_queue) >= self.DELETE_THRESHOLD:
                 self._start_gc()
 
