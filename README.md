@@ -76,13 +76,13 @@ This allows KaiROS to **blend your favorites with intelligent discoveries**, cre
 
 ## 🏗️ Tech Stack
 
-Language        → Python 3.10+
-Framework       → discord.py
-Audio Fetching  → yt-dlp
-Playback        → FFmpeg (Opus encoding)
-Machine Learning→ PyTorch + Librosa
-NLP             → lingua-py
-Database        → SQLite3
+- Language        → Python 3.10+
+- Framework       → discord.py
+- Audio Fetching  → yt-dlp
+- Playback        → FFmpeg (Opus encoding)
+- Machine Learning→ PyTorch + Librosa
+- NLP             → lingua-py
+- Database        → SQLite3
 
 ---
 
