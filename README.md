@@ -1,87 +1,99 @@
-🎧 KaiROS: Vibe-Aware Discord Music Bot
-KaiROS (Kinetic Audio Intelligent Recommendation & Orchestration System) is a high-performance, machine-learning-powered Discord music bot.
+# 🎧 KaiROS — Vibe-Aware Discord Music Bot
 
-Unlike standard bots that simply play URLs in a queue, KaiROS acts as an AI DJ. It builds a local "Neural Memory" of every song it plays, analyzing the audio to map its emotional "Vibe" across Valence (Positivity) and Arousal (Energy). It uses this database to seamlessly blend your known favorites with intelligent YouTube discoveries.
+> **Kinetic Audio Intelligent Recommendation & Orchestration System**
 
-🚀 Key Features
-🧠 ML Emotion Analysis: Processes downloaded audio through a custom PyTorch & Librosa pipeline to extract definitive Valence and Arousal coordinates for every track.
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![Framework](https://img.shields.io/badge/discord.py-async-green)
+![ML](https://img.shields.io/badge/ML-PyTorch%20%7C%20Librosa-orange)
+![Database](https://img.shields.io/badge/DB-SQLite-lightgrey)
+![Status](https://img.shields.io/badge/status-active-success)
 
-🎛️ Weighted Autoplay Mixer: A probabilistic recommendation engine that balances "Exploration" (YouTube's related tracks) and "Exploitation" (KaiROS's internal database matches via Squared Euclidean Distance).
+---
 
-🛡️ Self-Healing Voice Engine: Features a dynamic polling and crash-recovery system. If Discord forcefully drops the WebSocket connection (Error 1006), KaiROS auto-reconnects and pushes the interrupted track back to the front of the queue seamlessly.
+## 🧠 What is KaiROS?
 
-🌐 Smart Metadata Extraction: A hybrid pipeline utilizing regex-based title sanitization and high-accuracy statistical N-gram language detection (lingua-py) to automatically tag tracks by language (en, ja, hi, etc.) without relying solely on YouTube's tags.
+**KaiROS is not just a music bot. It’s an AI DJ.**
 
-⚡ Zero-Blocking Architecture: Audio analysis and file cleanup are offloaded to background asyncio workers (InferenceQueue and LazyDeleter), ensuring pristine, lag-free music playback.
+Unlike traditional bots that simply queue songs, KaiROS builds a **Neural Memory** of every track it plays.  
+It understands music through **emotion**, mapping songs across:
 
-🛠️ Commands
-🎵 Music Control
-/play [url or search query] - Downloads and adds a track to the queue.
+- 🎯 **Valence** → Positivity / Mood  
+- ⚡ **Arousal** → Energy / Intensity  
 
-/skip - Instantly skips the current track.
+This allows KaiROS to **blend your favorites with intelligent discoveries**, creating a seamless listening experience.
 
-/stop - Halts playback, clears the queue, and initiates smart garbage collection.
+---
 
-/queue - Displays an interactive, paginated UI of the upcoming tracks.
+## 🚀 Key Features
 
-🧠 Intelligent Vibe Features
-/start - Opens the Vibe Selector UI. Choose a mood (Hype, Chill, Intense, Melancholic) and KaiROS will instantly pull a random matching song from its neural memory.
+### 🧠 ML Emotion Analysis
+- Custom PyTorch + Librosa pipeline.
+- Extracts definitive **Valence & Arousal coordinates** from audio features.
+- Builds a persistent, localized emotional dataset.
 
-/recommend - Analyzes the currently playing track and generates 5 highly accurate matches based on Vibe Distance, Language, Artist, and Release Year.
+### 🎛️ Weighted Autoplay Mixer
+- Probabilistic recommendation engine balancing:
+  - 🔍 **Exploration** → YouTube's related track discovery.
+  - 📚 **Exploitation** → Internal memory matches via **Squared Euclidean Distance**.
+- Adjustable weighting allows tuning the discovery-to-familiarity ratio.
 
-/brain - Displays current database statistics, including total tracked songs and the Global Vibe Average of your server.
+### 🛡️ Self-Healing Voice Engine
+- Dynamic polling auto-recovers from Discord WebSocket drops (Error 1006).
+- Seamlessly re-establishes voice connections.
+- Automatically reinserts the interrupted track at the front of the queue.
 
-🏗️ Technical Architecture
-Language: Python 3.10+
+### 🌐 Smart Metadata Extraction
+- Hybrid pipeline using Regex-based title sanitization.
+- High-accuracy statistical N-gram language detection via **lingua-py** (tuned with a custom 0.15 confidence threshold for short titles).
+- Supports multilingual tagging: `en`, `hi`, `ja`, etc.
 
-Core Framework: discord.py
+### ⚡ Zero-Blocking Architecture
+- Audio analysis and file cleanup offloaded to background asyncio workers (`InferenceQueue` and `LazyDeleter`).
+- Ensures pristine, lag-free music playback.
 
-Audio Fetching: yt-dlp (Extracts metadata & audio streams)
+---
 
-Playback Engine: FFmpeg (Optimized for low-latency streaming)
+## 🎵 Commands
 
-Machine Learning: PyTorch, Librosa (Acoustic analysis)
+### 🎧 Music Control
 
-NLP / Linguistics: lingua-py (Confidence-based language classification)
+| Command | Description |
+|--------|-------------|
+| `/play [url/query]` | Download and add a track to the queue |
+| `/skip` | Instantly skip the current track |
+| `/stop` | Halt playback, clear queue, and trigger garbage collection |
+| `/queue` | Show an interactive, paginated queue UI |
 
-Database: SQLite3 (Fast, localized vector-distance querying)
+### 🧠 Intelligent Vibe System
 
-The Data Flow
-User requests a song. yt-dlp fetches the audio stream and metadata.
+| Command | Description |
+|--------|-------------|
+| `/start` | Open Vibe Selector UI (Hype, Chill, Intense, Melancholic) |
+| `/recommend` | Get 5 matches based on current Vibe, Language, Artist, and Year |
+| `/brain` | View database statistics and Global Vibe Average |
 
-FFmpeg plays the audio in the voice channel.
+---
 
-Upon completion, the InferenceQueue processes the .webm file through PyTorch/Librosa.
+## 🏗️ Tech Stack
 
-Language is predicted via Lingua (with a 0.15 confidence threshold for short titles).
+```txt
+Language        → Python 3.10+
+Framework       → discord.py
+Audio Fetching  → yt-dlp
+Playback        → FFmpeg (Opus encoding)
+Machine Learning→ PyTorch + Librosa
+NLP             → lingua-py
+Database        → SQLite3
 
-V/A coordinates, Language, Artist, and Release Year are saved to SQLite.
+---
 
-The LazyDeleter safely removes the audio file from the host machine to preserve storage.
+## 🔗 How to Use KaiROS
 
-🔗 How to Use KaiROS
-You don’t need to host your own instance to experience the Vibe-Engine. You can join the official development and testing hub:
+```txt
+- You don’t need to host your own instance to experience the Vibe-Engine. Join the official development and testing hub:
 
-Join the Discord Server: [Join Official Discord](https://discord.gg/ZztmZ5JFCQ)
+- Join the Discord Server: Join KaiROS Official (Ensure you use a permanent invite link!)
 
-Invite the Bot: Once inside, you can use the /invite command or click the Bot's profile to add it to your own server.
+- Invite the Bot: Once inside, use the /invite command or click the Bot's profile to add it to your own server.
 
-Start the Vibe: Use /start in any authorized channel to begin building your server's unique musical profile.
-
-The Data Lifecycle
-Ingestion: A user requests a track. yt-dlp pulls the stream.
-
-Streaming: FFmpeg pipes the audio to Discord's voice servers.
-
-Inference: Upon track completion, the InferenceQueue triggers the PyTorch model to calculate emotional coordinates.
-
-Classification: Title is cleaned via Regex and passed to Lingua for ISO language tagging.
-
-Persistence: Coordinates and metadata are committed to the SQL database.
-
-Cleanup: LazyDeleter performs scheduled garbage collection of temporary audio files to maintain disk health.
-
-📈 Database Insights
-Once the bot has analyzed enough music in your server, you can visualize the "Emotional DNA" of your community.
-
-By querying the SQLite backend, KaiROS can generate reports on your server's most frequent musical quadrants (e.g., Is this a "Chill" server or an "Intense" server?). This data directly influences the Weighted Autoplay DJ, ensuring the bot learns and evolves alongside your tastes.
+- Start the Vibe: Use /start in any authorized channel to begin building your server's unique musical profile.
