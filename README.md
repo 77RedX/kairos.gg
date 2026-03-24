@@ -92,6 +92,6 @@ This allows KaiROS to **blend your favorites with intelligent discoveries**, cre
 
 - Join the Discord Server: [Join KaiROS Official](https://discord.gg/ZztmZ5JFCQ)
 
-- Invite the Bot: Once inside, click the Bot's profile to add it to your own server.
+- Invite the Bot: Use the [invite link](https://discord.com/oauth2/authorize?client_id=1466508202471592057&permissions=37080256&integration_type=0&scope=bot+applications.commands), or click the Bot's profile to add it to your own server.
 
 - Start the Vibe: Use /start in any authorized channel to begin building your server's unique musical profile.
