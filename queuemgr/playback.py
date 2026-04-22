@@ -1,20 +1,24 @@
 import yt_dlp
 import asyncio
-import os
 import logging
-
 logger = logging.getLogger(__name__)
 
-if os.name == 'posix':
+import os as _os
+
+if _os.name == 'posix':
     _tmpl = "/dev/shm/kairos_%(id)s.%(ext)s"
+    _JS_RUNTIME = {"quickjs": {"path": _os.path.expanduser("~/bin/qjs")}}
 else:
     _tmpl = "downloads/%(id)s.%(ext)s"
+    import shutil as _shutil
+    _node = _shutil.which("node")
+    _JS_RUNTIME = {"node": {"path": _node}} if _node else {"node": {}}
 
-_js_config = {"node": {}}
+_COOKIES = _os.path.expanduser("~/kairos.gg/cookies.txt")
 
 def filter_duration(info, *, incomplete):
     duration = info.get('duration')
-    if duration and duration > 1800: # 1800 seconds = 30 minutes
+    if duration and duration > 1800:
         return 'This song file can\'t be fetched. (Duration > 30 mins)'
     return None
 
@@ -23,11 +27,14 @@ YDL_OPTIONS = {
     "noplaylist": True,
     "outtmpl": _tmpl,
     "quiet": True,
-    "js_runtimes": _js_config,
+    "no_warnings": True,
+    "nocheckcertificate": True,
+    "source_address": "0.0.0.0",
     "concurrent_fragment_downloads": 10,
     "http_chunk_size": 10485760,
-    "source_address": "0.0.0.0",
-    "match_filter": filter_duration, # <-- Added the filter here
+    "match_filter": filter_duration,
+    "js_runtimes": _JS_RUNTIME,
+    **( {"cookiefile": _COOKIES} if _os.path.exists(_COOKIES) else {} ),
 }
 
 async def download_track(video_url):
@@ -59,12 +66,15 @@ async def download_track(video_url):
 # Ultra-fast search options (No downloading, just scraping titles)
 SEARCH_OPTIONS = {
     "format": "bestaudio/best",
-    "extract_flat": True, 
+    "extract_flat": True,
     "quiet": True,
     "noplaylist": True,
     "no_warnings": True,
     "ignoreerrors": True,
-    "js_runtimes": _js_config,
+    "nocheckcertificate": True,
+    "source_address": "0.0.0.0",
+    "js_runtimes": _JS_RUNTIME,
+    **( {"cookiefile": _COOKIES} if _os.path.exists(_COOKIES) else {} ),
 }
 
 async def fetch_search_results(query: str, limit: int = 5):

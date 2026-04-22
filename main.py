@@ -1,4 +1,5 @@
 import os
+import shutil
 import logging
 from logging.handlers import RotatingFileHandler
 import discord
@@ -62,16 +63,23 @@ intents = discord.Intents.default()
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# yt-dlp / ffmpeg
+_COOKIES = os.path.expanduser("~/kairos.gg/cookies.txt")
+if os.name == 'posix':
+    _JS_RUNTIME = {"quickjs": {"path": os.path.expanduser("~/bin/qjs")}}
+else:
+    _node = shutil.which("node")
+    _JS_RUNTIME = {"node": {"path": _node}} if _node else {"node": {}}
+
 YDL_OPTIONS = {
-    "format": "bestaudio/best",        # Standardize with playback.py
+    "format": "bestaudio/best",
     "quiet": True,
     "noplaylist": True,
-    #"extract_flat": "in_playlist",    # Helps search speed and reliability
-    "ignoreerrors": True,             # Don't crash if one search result is dead
+    "ignoreerrors": True,
     "no_warnings": True,
     "nocheckcertificate": True,
-    "js_runtimes": {"node": {}},
+    "source_address": "0.0.0.0",
+    "js_runtimes": _JS_RUNTIME,
+    **( {"cookiefile": _COOKIES} if os.path.exists(_COOKIES) else {} ),
 }
 
 FFMPEG_OPTIONS = {
@@ -122,6 +130,9 @@ async def process_play_request(interaction: discord.Interaction, url: str):
                         return None
                     info = info["entries"][0]
 
+                if not info:
+                    return "YT_BLOCK"
+
                 duration = info.get("duration")
                 if duration and duration > 1800: # 1800 seconds = 30 minutes
                     return "TOO_LONG"
@@ -135,6 +146,11 @@ async def process_play_request(interaction: discord.Interaction, url: str):
 
         if result == "TOO_LONG":
             await status_msg.edit(content="❌ This song file can't be fetched.")
+            return
+        if result == "YT_BLOCK":
+            logger.warning(f"⚠️ YT_BLOCK encountered for {url}. If using cookies.txt, it may have expired. Please export fresh cookies!")
+            
+            await status_msg.edit(content="⚠️ Provider blocked the request. Inform devs about this incident.")
             return
         elif result is None:
             await status_msg.edit(content="❌ No results found.")
