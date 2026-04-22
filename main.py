@@ -18,12 +18,38 @@ import sys
 from UI.vibe_selector import VibeSelector
 from UI.recommend_view import RecommendView
 
-os.makedirs("downloads", exist_ok=True) #making temp downloads directory
-for f in os.listdir("downloads"):
-    try:
-        os.remove(os.path.join("downloads", f))
-    except Exception:
-        pass
+if os.name == 'posix':
+    import glob
+
+    def sweep_orphans():
+        """Deletes lingering audio files from previous crashed sessions."""
+        if os.name == 'posix':
+            pattern = '/dev/shm/kairos_*'
+        else:
+            pattern = 'downloads/kairos_*'  # Or whatever your Windows folder is
+            
+        orphans = glob.glob(pattern)
+        count = 0
+        
+        for file_path in orphans:
+            try:
+                os.remove(file_path)
+                count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete orphan {file_path}: {e}")
+                
+        if count > 0:
+            logger.info(f"🧹 Startup Sweep: Deleted {count} orphaned audio files!")
+
+    # Call it right away when the script starts
+    sweep_orphans()
+else:
+    os.makedirs("downloads", exist_ok=True) #making temp downloads directory
+    for f in os.listdir("downloads"):
+        try:
+            os.remove(os.path.join("downloads", f))
+        except Exception:
+            pass
 
 # logging
 
