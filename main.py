@@ -18,6 +18,8 @@ import sys
 from UI.vibe_selector import VibeSelector
 from UI.recommend_view import RecommendView
 
+logger = logging.getLogger(__name__)
+
 if os.name == 'posix':
     import glob
 
@@ -76,7 +78,6 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
-logger = logging.getLogger(__name__)
 BOT_START_TIME=time.time()
 
 # Token
