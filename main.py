@@ -91,7 +91,10 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 _COOKIES = os.path.expanduser("~/kairos.gg/cookies.txt")
 if os.name == 'posix':
-    _JS_RUNTIME = {"quickjs": {"path": os.path.expanduser("~/bin/qjs")}}
+    _JS_RUNTIME = {
+    "deno": {"path": os.path.expanduser("~/bin/deno-wrapper")},
+    "quickjs": {"path": os.path.expanduser("~/bin/qjs")},
+}
 else:
     _node = shutil.which("node")
     _JS_RUNTIME = {"node": {"path": _node}} if _node else {"node": {}}

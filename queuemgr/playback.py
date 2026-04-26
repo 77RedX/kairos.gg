@@ -2,19 +2,21 @@ import yt_dlp
 import asyncio
 import logging
 logger = logging.getLogger(__name__)
+import os
 
-import os as _os
-
-if _os.name == 'posix':
+if os.name == 'posix':
     _tmpl = "/dev/shm/kairos_%(id)s.%(ext)s"
-    _JS_RUNTIME = {"quickjs": {"path": _os.path.expanduser("~/bin/qjs")}}
+    _JS_RUNTIME = {
+    "deno": {"path": os.path.expanduser("~/bin/deno-wrapper")},
+    "quickjs": {"path": os.path.expanduser("~/bin/qjs")},
+}
 else:
     _tmpl = "downloads/%(id)s.%(ext)s"
     import shutil as _shutil
     _node = _shutil.which("node")
     _JS_RUNTIME = {"node": {"path": _node}} if _node else {"node": {}}
 
-_COOKIES = _os.path.expanduser("~/kairos.gg/cookies.txt")
+_COOKIES = os.path.expanduser("~/kairos.gg/cookies.txt")
 
 def filter_duration(info, *, incomplete):
     duration = info.get('duration')
@@ -34,7 +36,7 @@ YDL_OPTIONS = {
     "http_chunk_size": 10485760,
     "match_filter": filter_duration,
     "js_runtimes": _JS_RUNTIME,
-    **( {"cookiefile": _COOKIES} if _os.path.exists(_COOKIES) else {} ),
+    **( {"cookiefile": _COOKIES} if os.path.exists(_COOKIES) else {} ),
 }
 
 async def download_track(video_url):
@@ -74,7 +76,7 @@ SEARCH_OPTIONS = {
     "nocheckcertificate": True,
     "source_address": "0.0.0.0",
     "js_runtimes": _JS_RUNTIME,
-    **( {"cookiefile": _COOKIES} if _os.path.exists(_COOKIES) else {} ),
+    **( {"cookiefile": _COOKIES} if os.path.exists(_COOKIES) else {} ),
 }
 
 async def fetch_search_results(query: str, limit: int = 5):
