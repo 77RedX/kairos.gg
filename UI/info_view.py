@@ -4,7 +4,7 @@ from discord.ui import View, button
 
 def build_info_embed(interaction, page, bot, start_time):
     vc = interaction.guild.voice_client
-    in_vc = "🟢 Connected" if vc and vc.is_connected() else "🔴 Disconnected"
+    in_vc = "Connected" if vc and vc.is_connected() else "Disconnected"
 
     # Use Discord's native relative timestamp (automatically updates in UI!)
     uptime_str = f"<t:{int(start_time)}:R>"

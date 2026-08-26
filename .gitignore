@@ -11,3 +11,5 @@ kairos.log
 logs/
 database/*.db
 migrate.py
+.agents/
+graphify-out/
