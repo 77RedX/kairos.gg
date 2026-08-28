@@ -104,9 +104,10 @@ class QueueView(View):
 
     @button(label="🔀 Shuffle", style=discord.ButtonStyle.secondary)
     async def shuffle_btn(self, interaction: discord.Interaction, _):
+        if interaction.user != self.interaction.user:
+            return await interaction.response.send_message("This isn't your menu!", ephemeral=True)
         self.queue_mgr.shuffle(interaction.guild.id)
         await self.refresh(interaction)
-
     @button(label="🔄 Refresh", style=discord.ButtonStyle.secondary)
     async def refresh_btn(self, interaction: discord.Interaction, _):
         # Anyone can hit refresh to see the latest queue!
