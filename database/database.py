@@ -13,6 +13,11 @@ def init_db():
     try:
         with sqlite3.connect(DB_FILE) as conn:
             cursor = conn.cursor()
+
+            # Performance: WAL mode allows concurrent reads while writing
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS track_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,6 +35,11 @@ def init_db():
                     release_year INTEGER DEFAULT 0
                 )
             ''')
+
+            # Indexes for fast recommendation and vibe queries
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_track_logs_guild ON track_logs(guild_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_track_logs_vibe ON track_logs(valence_avg, arousal_avg)")
+
             conn.commit()
             logger.info("✅ Database initialized with streamlined metadata schema.")
     except Exception as e:
@@ -130,14 +140,14 @@ def get_track_by_vibe(vibe: str):
             else:                   # Melancholic & Slow
                 condition = "valence_avg <= 0 AND arousal_avg <= 0"
             
-            # Fetch 1 random song that matches the condition
+            # Fetch 3 random songs that match the condition to give fallback options
             cursor.execute(f"""
                 SELECT title, youtube_url, valence_avg, arousal_avg 
                 FROM track_logs 
                 WHERE {condition}
-                ORDER BY RANDOM() LIMIT 1
+                ORDER BY RANDOM() LIMIT 3
             """)
-            return cursor.fetchone()
+            return cursor.fetchall()
             
     except Exception as e:
         logger.error(f"❌ Failed to fetch vibe track: {e}")

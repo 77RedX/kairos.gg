@@ -5,18 +5,8 @@ import os
 
 logger = logging.getLogger(__name__)
 
-_js_config = {"node": {}}
-
-# --- OPTIMIZED SEARCH OPTIONS ---
-YDL_OPTIONS = {
-    "quiet": True,
-    "skip_download": True,
-    "extract_flat": "in_playlist", # STRICTER than True: forces flat extraction only inside playlists
-    "playlist_items": "1-16",      # Tells the YouTube API directly to only send the first 15
-    "ignoreerrors": True,          # Skip deleted/private videos instantly
-    "no_warnings": True,
-    "js_runtimes": _js_config,
-}
+from utils.ydl_config import get_related_opts
+YDL_OPTIONS = get_related_opts()
 
 def _normalize_title(title: str):
     if not title:

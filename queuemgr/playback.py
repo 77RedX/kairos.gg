@@ -4,80 +4,67 @@ import logging
 logger = logging.getLogger(__name__)
 import os
 
-if os.name == 'posix':
-    _tmpl = "/dev/shm/kairos_%(id)s.%(ext)s"
-    _JS_RUNTIME = {
-    "deno": {"path": os.path.expanduser("~/bin/deno-wrapper")},
-    "quickjs": {"path": os.path.expanduser("~/bin/qjs")},
-}
-else:
-    _tmpl = "downloads/%(id)s.%(ext)s"
-    import shutil as _shutil
-    _node = _shutil.which("node")
-    _JS_RUNTIME = {"node": {"path": _node}} if _node else {"node": {}}
+from utils.ydl_config import get_download_opts
+YDL_OPTIONS = get_download_opts()
 
-_COOKIES = os.path.expanduser("~/kairos.gg/cookies.txt")
-
-def filter_duration(info, *, incomplete):
-    duration = info.get('duration')
-    if duration and duration > 1800:
-        return 'This song file can\'t be fetched. (Duration > 30 mins)'
-    return None
-
-YDL_OPTIONS = {
-    "format": "bestaudio/best",
-    "noplaylist": True,
-    "outtmpl": _tmpl,
-    "quiet": True,
-    "no_warnings": True,
-    "nocheckcertificate": True,
-    "source_address": "0.0.0.0",
-    "concurrent_fragment_downloads": 10,
-    "http_chunk_size": 10485760,
-    "match_filter": filter_duration,
-    "js_runtimes": _JS_RUNTIME,
-    **( {"cookiefile": _COOKIES} if os.path.exists(_COOKIES) else {} ),
-}
-
-async def download_track(video_url):
+async def download_track(video_url, pre_info=None):
+    """Downloads a track. If pre_info is provided, attempts to skip re-extraction.
+    
+    Includes retry logic for transient failures (403, network glitches).
+    """
     loop = asyncio.get_running_loop()
 
     def _dl():
-        try:
-            with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-                info = ydl.extract_info(video_url, download=True)
-                
-                # Check if the download was skipped by the filter
-                if not info:
-                    raise Exception("Video rejected by filter.")
-                
-                filename = ydl.prepare_filename(info)
-                title = info.get("title")
-                return filename, title, info
-        except yt_dlp.utils.DownloadError as e:
-            # Check if it was our specific duration error
-            if "This song file can't be fetched" in str(e):
-                logger.warning(f"Skipped {video_url}: Exceeds 30 mins limit.")
-                return None, None, None
-            # Otherwise, re-raise the actual error (like copyright or network issues)
-            logger.error(f"Download failed for {video_url}: {e}")
-            raise e
+        max_retries = 2
+        last_error = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
+                    # Fast path: use pre-extracted info to skip re-extraction
+                    if pre_info and attempt == 0:
+                        try:
+                            ydl.process_info(pre_info)
+                            filename = ydl.prepare_filename(pre_info)
+                            title = pre_info.get("title")
+                            logger.info(f"⚡ Fast download (skipped re-extraction): {title}")
+                            return filename, title, pre_info
+                        except Exception as e:
+                            logger.info(f"Pre-extracted info stale, re-extracting: {e}")
+
+                    # Full extraction + download
+                    info = ydl.extract_info(video_url, download=True)
+
+                    if not info:
+                        raise Exception("Video rejected by filter.")
+
+                    filename = ydl.prepare_filename(info)
+                    title = info.get("title")
+                    return filename, title, info
+
+            except yt_dlp.utils.DownloadError as e:
+                error_msg = str(e)
+
+                # Duration filter — don't retry, this is intentional
+                if "This song file can't be fetched" in error_msg:
+                    logger.warning(f"Skipped {video_url}: Exceeds 30 mins limit.")
+                    return None, None, None
+
+                last_error = e
+                if attempt < max_retries:
+                    wait = 1.5 * (attempt + 1)
+                    logger.warning(f"Download attempt {attempt + 1} failed for {video_url}: {e}. Retrying in {wait}s...")
+                    import time
+                    time.sleep(wait)
+                else:
+                    logger.error(f"Download failed for {video_url} after {max_retries + 1} attempts: {e}")
+                    raise last_error
 
     return await loop.run_in_executor(None, _dl)
 
 # Ultra-fast search options (No downloading, just scraping titles)
-SEARCH_OPTIONS = {
-    "format": "bestaudio/best",
-    "extract_flat": True,
-    "quiet": True,
-    "noplaylist": True,
-    "no_warnings": True,
-    "ignoreerrors": True,
-    "nocheckcertificate": True,
-    "source_address": "0.0.0.0",
-    "js_runtimes": _JS_RUNTIME,
-    **( {"cookiefile": _COOKIES} if os.path.exists(_COOKIES) else {} ),
-}
+from utils.ydl_config import get_search_opts
+SEARCH_OPTIONS = get_search_opts()
 
 async def fetch_search_results(query: str, limit: int = 5):
     """Fetches top N search results from YouTube without downloading."""

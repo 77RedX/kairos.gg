@@ -33,10 +33,10 @@ class LazyDeleter:
         self._start_gc()
 
     def _start_gc(self):
-        if self.gc_running:
-            return
-
-        self.gc_running = True
+        with self.lock:
+            if self.gc_running:
+                return
+            self.gc_running = True
         threading.Thread(target=self._gc_loop, daemon=True).start()
 
     def _gc_loop(self):
