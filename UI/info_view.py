@@ -19,7 +19,7 @@ def build_info_embed(interaction, page, bot, start_time):
 
     # 0x2b2d31 is the invisible embed color for Discord dark mode
     embed = discord.Embed(
-        title="✨ KaiROS System Info",
+        title="KaiROS System Info",
         color=0x2b2d31 
     )
     
@@ -83,6 +83,6 @@ class InfoView(View):
         self._update_button_state()
         await interaction.response.edit_message(embed=embed, view=self)
         
-    @button(label="🗑️", style=discord.ButtonStyle.danger)
+    @button(label="❌", style=discord.ButtonStyle.danger)
     async def close(self, interaction: discord.Interaction, btn):
         await interaction.message.delete()
