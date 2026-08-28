@@ -13,12 +13,7 @@ class VibeSelector(discord.ui.View):
             await interaction.response.send_message("I don't have enough songs in this vibe yet!", ephemeral=True)
             return
             
-        # We fetch 3 tracks. Since we can't block to check them, we just queue the first one. 
-        # But to be resilient, we can queue all 3. Qmgr will handle playing them.
-        # Actually, let's just queue the first one for now, as queueing multiple might be confusing.
-        # Wait, the task says "Fetch 3 candidates, try until one works."
-        # If we can't await yt-dlp here directly, we'll queue the first one.
-        # Let's queue the top track.
+        # DB returns up to 3 candidates; queue only the first — qmgr handles failures.
         title, url, v, a = tracks[0]
         
         # 1. Update the UI to show the chosen song and remove the buttons
@@ -27,7 +22,7 @@ class VibeSelector(discord.ui.View):
             description=f"Starting the queue with:\n**[{title}]({url})**\n*(V: {v:.2f} | A: {a:.2f})*",
             color=color
         )
-        # If tracks > 1, add fallback note
+        # Show fallback count if additional candidates were returned
         if len(tracks) > 1:
             embed.set_footer(text=f"{len(tracks)-1} fallback tracks ready if this one fails.")
             

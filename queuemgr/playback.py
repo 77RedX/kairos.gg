@@ -46,7 +46,7 @@ async def download_track(video_url, pre_info=None):
                 error_msg = str(e)
 
                 # Duration filter — don't retry, this is intentional
-                if "This song file can't be fetched" in error_msg:
+                if "TOO_LONG" in error_msg or "This song file can't be fetched" in error_msg:
                     logger.warning(f"Skipped {video_url}: Exceeds 30 mins limit.")
                     return None, None, None
 

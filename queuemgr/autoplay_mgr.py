@@ -51,6 +51,7 @@ async def fill_autoplay(state, guild_id):
     except Exception as e:
         logger.error(f"Failed to get DB stats, defaulting weight to 0.0: {e}")
         kairos_weight = 0.0
+        track_count = 0
 
     logger.info(f"🧠 KaiROS Brain Weight: {kairos_weight:.2f} (from {track_count} tracks)")
 
@@ -71,6 +72,10 @@ async def fill_autoplay(state, guild_id):
                 for rec_title, rec_url, _, _, score in raw_db_recs:
                     if rec_url not in history and rec_url not in queued_urls:
                         db_candidates.append((rec_url, rec_title, score))
+            else:
+                # Song not in DB — fall back to pure YouTube discovery
+                logger.info("🌐 No DB data for current track, using 100% YouTube discovery")
+                kairos_weight = 0.0
                         
         except Exception as e:
             logger.error(f"Failed to fetch DB recommendations for autoplay: {e}")
