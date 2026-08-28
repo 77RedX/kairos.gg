@@ -4,7 +4,7 @@ import random
 import re
 import functools
 from autoplay.recommender import get_related, _normalize_title
-from database.database import get_seed_track, get_recommendations
+from database.database import get_seed_track, get_recommendations, get_db_stats
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # 0.5 = 50% KaiROS Memory / 50% YouTube
 # 1.0 = 100% KaiROS Memory (Needs huge DB)
 # ==========================================
-KAIROS_WEIGHT = 0.0 
+# KAIROS_WEIGHT is now dynamically calculated based on DB size
 # ==========================================
 
 BAD_WORDS = [
@@ -44,13 +44,24 @@ async def fill_autoplay(state, guild_id):
 
     logger.info(f"Autoplay queue size before fill: {len(auto_q)}")
 
+    # Calculate dynamic KAIROS_WEIGHT
+    try:
+        track_count = get_db_stats()[0]
+        kairos_weight = min(0.7, track_count / 1500)
+    except Exception as e:
+        logger.error(f"Failed to get DB stats, defaulting weight to 0.0: {e}")
+        kairos_weight = 0.0
+        track_count = 0
+
+    logger.info(f"🧠 KaiROS Brain Weight: {kairos_weight:.2f} (from {track_count} tracks)")
+
     db_candidates = []
     yt_candidates = []
 
     # ---------------------------------------------------------
     # SOURCE 1: KAIROS MEMORY (Only fetch if weight > 0)
     # ---------------------------------------------------------
-    if KAIROS_WEIGHT > 0:
+    if kairos_weight > 0:
         try:
             seed_track = get_seed_track(url, str(guild_id))
             if seed_track:
@@ -61,6 +72,10 @@ async def fill_autoplay(state, guild_id):
                 for rec_title, rec_url, _, _, score in raw_db_recs:
                     if rec_url not in history and rec_url not in queued_urls:
                         db_candidates.append((rec_url, rec_title, score))
+            else:
+                # Song not in DB — fall back to pure YouTube discovery
+                logger.info("🌐 No DB data for current track, using 100% YouTube discovery")
+                kairos_weight = 0.0
                         
         except Exception as e:
             logger.error(f"Failed to fetch DB recommendations for autoplay: {e}")
@@ -68,7 +83,7 @@ async def fill_autoplay(state, guild_id):
     # ---------------------------------------------------------
     # SOURCE 2: YOUTUBE DISCOVERY (Only fetch if weight < 1)
     # ---------------------------------------------------------
-    if KAIROS_WEIGHT < 1.0:
+    if kairos_weight < 1.0:
         loop = asyncio.get_running_loop()
         try:
             related = await loop.run_in_executor(None, functools.partial(get_related, url))
@@ -86,7 +101,7 @@ async def fill_autoplay(state, guild_id):
     while len(auto_q) < 15 and (db_candidates or yt_candidates):
         
         if db_candidates and yt_candidates:
-            use_kairos = random.random() < KAIROS_WEIGHT
+            use_kairos = random.random() < kairos_weight
         elif db_candidates:
             use_kairos = True
         else:

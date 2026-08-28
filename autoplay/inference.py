@@ -2,6 +2,8 @@ import torch
 import librosa
 import numpy as np
 import logging
+import subprocess
+import json
 
 # Import your model and configs from your ML folder
 from .model import EmotionModel
@@ -31,8 +33,39 @@ class EmotionAnalyzer:
     def analyze_audio(self, file_path):
         """Extracts features and returns average Valence and Arousal."""
         try:
-            # 1. Load ONLY the chunk the model was trained to understand (e.g., 15s to 45s)
-            y, sr = librosa.load(file_path, sr=SAMPLE_RATE, offset=START_TIME, duration=30.0)
+            # 1. Get duration using ffprobe
+            ffprobe_cmd = [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "json", file_path
+            ]
+            probe_result = subprocess.run(ffprobe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if probe_result.returncode != 0:
+                raise Exception(f"ffprobe error: {probe_result.stderr}")
+            
+            probe_data = json.loads(probe_result.stdout)
+            duration = float(probe_data["format"]["duration"])
+            
+            # Calculate offset and duration to load
+            offset = min(START_TIME, max(0.0, duration - 30.0))
+            
+            # 2. Extract audio using ffmpeg directly to NumPy array
+            ffmpeg_cmd = [
+                "ffmpeg",
+                "-ss", str(offset),
+                "-i", file_path,
+                "-t", "30.0",
+                "-f", "f32le",
+                "-acodec", "pcm_f32le",
+                "-ac", "1",
+                "-ar", str(SAMPLE_RATE),
+                "pipe:1"
+            ]
+            ffmpeg_result = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if ffmpeg_result.returncode != 0:
+                raise Exception(f"ffmpeg error: {ffmpeg_result.stderr.decode('utf-8', errors='ignore')}")
+            
+            y = np.frombuffer(ffmpeg_result.stdout, dtype=np.float32)
+            sr = SAMPLE_RATE
 
             # Calculate exact window and hop sizes from training
             n_fft = int(WINDOW_SIZE * sr)

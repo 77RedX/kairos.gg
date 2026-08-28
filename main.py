@@ -90,27 +90,8 @@ intents = discord.Intents.default()
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-_COOKIES = os.path.expanduser("~/kairos.gg/cookies.txt")
-if os.name == 'posix':
-    _JS_RUNTIME = {
-    "deno": {"path": os.path.expanduser("~/bin/deno-wrapper")},
-    "quickjs": {"path": os.path.expanduser("~/bin/qjs")},
-}
-else:
-    _node = shutil.which("node")
-    _JS_RUNTIME = {"node": {"path": _node}} if _node else {"node": {}}
-
-YDL_OPTIONS = {
-    "format": "bestaudio/best",
-    "quiet": True,
-    "noplaylist": True,
-    "ignoreerrors": True,
-    "no_warnings": True,
-    "nocheckcertificate": True,
-    "source_address": "0.0.0.0",
-    "js_runtimes": _JS_RUNTIME,
-    **( {"cookiefile": _COOKIES} if os.path.exists(_COOKIES) else {} ),
-}
+from utils.ydl_config import get_extract_opts
+YDL_OPTIONS = get_extract_opts()
 
 FFMPEG_OPTIONS = {
     "options": "-vn",
@@ -175,7 +156,7 @@ async def process_play_request(interaction: discord.Interaction, url: str):
         result = await loop.run_in_executor(None, extract)
 
         if result == "TOO_LONG":
-            await status_msg.edit(content="❌ This song file can't be fetched.")
+            await status_msg.edit(content="⏱️ This track is over 30 minutes — too long to play.")
             return
         if result == "YT_BLOCK":
             logger.warning(f"⚠️ YT_BLOCK encountered for {url}. If using cookies.txt, it may have expired. Please export fresh cookies!")
@@ -183,7 +164,7 @@ async def process_play_request(interaction: discord.Interaction, url: str):
             await status_msg.edit(content="⚠️ Provider blocked the request. Inform devs about this incident.")
             return
         elif result is None:
-            await status_msg.edit(content="❌ No results found.")
+            await status_msg.edit(content="❌ No results found. Try pasting a direct YouTube link.")
             return
 
         filename, title, video_url, full_info = result
@@ -192,7 +173,7 @@ async def process_play_request(interaction: discord.Interaction, url: str):
 
     except Exception:
         logger.exception("Play failed")
-        await status_msg.edit(content="❌ Couldn't find song.")
+        await status_msg.edit(content="❌ Couldn't find that song. Try pasting a direct YouTube link.")
 
 
 # --- events ---
@@ -456,7 +437,7 @@ async def recommend(interaction: discord.Interaction):
     seed_track = get_seed_track(current_url, str(interaction.guild.id))
 
     if not seed_track:
-        await interaction.followup.send("🧠 I'm still analyzing the vibe of this song.")
+        await interaction.followup.send("🧠 I haven't learned this song's vibe yet — it gets analyzed after playback finishes.")
         return
 
     # --- NEW: Unpack all 7 values returned by the updated get_seed_track ---
@@ -522,6 +503,136 @@ async def start_session(interaction: discord.Interaction):
     
     # Send the embed and attach the View, passing our bridge function to it
     await interaction.response.send_message(embed=embed, view=VibeSelector(play_callback=trigger_playback))
+
+# --- NEW COMMANDS ---
+
+@bot.tree.command(name="nowplaying", description="Show what's currently playing")
+async def nowplaying(interaction: discord.Interaction):
+    current, q = queue_mgr.get_queue_snapshot(interaction.guild.id)
+
+    if not current:
+        await interaction.response.send_message("Nothing is playing right now.", ephemeral=True)
+        return
+
+    fname, title, url, full_info = current
+    full_info = full_info or {}
+
+    embed = discord.Embed(
+        title="🎵 Now Playing",
+        description=f"**[{title}]({url})**",
+        color=0x7C3AED
+    )
+
+    thumb = full_info.get("thumbnail")
+    if thumb:
+        embed.set_thumbnail(url=thumb)
+
+    duration = full_info.get("duration")
+    if duration:
+        mins, secs = divmod(int(duration), 60)
+        embed.add_field(name="Duration", value=f"{mins}:{secs:02d}", inline=True)
+
+    artist = full_info.get("artist") or full_info.get("creator") or full_info.get("uploader")
+    if artist:
+        embed.add_field(name="Artist", value=artist, inline=True)
+
+    # Show V/A if this track has been analyzed
+    from database.database import check_if_exists
+    import sqlite3
+    try:
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "database", "kairos_memory.db")
+        with sqlite3.connect(db_path) as conn:
+            c = conn.cursor()
+            c.execute("SELECT valence_avg, arousal_avg FROM track_logs WHERE youtube_url = ?", (url,))
+            row = c.fetchone()
+            if row:
+                v, a = row
+                # Determine quadrant
+                if v > 0 and a > 0:
+                    vibe = "☀️ Happy & Energetic"
+                elif v > 0 and a <= 0:
+                    vibe = "🍃 Peaceful & Chill"
+                elif v <= 0 and a > 0:
+                    vibe = "🔥 Intense & Aggressive"
+                else:
+                    vibe = "🌧️ Melancholic & Dark"
+                embed.add_field(name="Vibe", value=f"{vibe}\n*V: {v:.2f} | A: {a:.2f}*", inline=False)
+    except Exception:
+        pass
+
+    remaining = len(q)
+    if remaining > 0:
+        embed.set_footer(text=f"{remaining} track{'s' if remaining != 1 else ''} in queue")
+
+    loop_mode = queue_mgr.state.loop_mode.get(interaction.guild.id, "off")
+    if loop_mode != "off":
+        loop_label = "🔂 Track" if loop_mode == "track" else "🔁 Queue"
+        embed.add_field(name="Loop", value=loop_label, inline=True)
+
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="shuffle", description="Shuffle the queue")
+async def shuffle_cmd(interaction: discord.Interaction):
+    q = queue_mgr.state.user_q(interaction.guild.id)
+    if not q:
+        await interaction.response.send_message("The queue is empty — nothing to shuffle.", ephemeral=True)
+        return
+
+    queue_mgr.shuffle(interaction.guild.id)
+    await interaction.response.send_message(f"🔀 Shuffled **{len(q)}** tracks in the queue.")
+
+
+@bot.tree.command(name="remove", description="Remove a track from the queue by position")
+@app_commands.describe(position="Position number (from /queue)")
+async def remove_cmd(interaction: discord.Interaction, position: int):
+    removed = queue_mgr.remove(interaction.guild.id, position)
+    if removed:
+        await interaction.response.send_message(f"🗑️ Removed **{removed}** from the queue.")
+    else:
+        await interaction.response.send_message("Invalid position. Check `/queue` for valid numbers.", ephemeral=True)
+
+
+@bot.tree.command(name="clear", description="Clear the entire queue (keeps current song playing)")
+async def clear_cmd(interaction: discord.Interaction):
+    user_q = queue_mgr.state.user_q(interaction.guild.id)
+    auto_q = queue_mgr.state.auto_q(interaction.guild.id)
+    total = len(user_q) + len(auto_q)
+
+    if total == 0:
+        await interaction.response.send_message("The queue is already empty.", ephemeral=True)
+        return
+
+    queue_mgr.clear_queue(interaction.guild.id)
+    await interaction.response.send_message(f"🗑️ Cleared **{total}** tracks from the queue.")
+
+
+@bot.tree.command(name="move", description="Move a track to a different position in the queue")
+@app_commands.describe(from_pos="Current position", to_pos="New position")
+async def move_cmd(interaction: discord.Interaction, from_pos: int, to_pos: int):
+    moved = queue_mgr.move(interaction.guild.id, from_pos, to_pos)
+    if moved:
+        await interaction.response.send_message(f"↕️ Moved **{moved}** to position {to_pos}.")
+    else:
+        await interaction.response.send_message("Invalid positions. Check `/queue` for valid numbers.", ephemeral=True)
+
+
+@bot.tree.command(name="loop", description="Toggle loop mode (off → track → queue)")
+async def loop_cmd(interaction: discord.Interaction):
+    gid = interaction.guild.id
+    current = queue_mgr.state.loop_mode.get(gid, "off")
+
+    # Cycle: off → track → queue → off
+    if current == "off":
+        queue_mgr.state.loop_mode[gid] = "track"
+        await interaction.response.send_message("🔂 Loop mode: **Current Track** (this song will repeat)")
+    elif current == "track":
+        queue_mgr.state.loop_mode[gid] = "queue"
+        await interaction.response.send_message("🔁 Loop mode: **Queue** (the entire queue will repeat)")
+    else:
+        queue_mgr.state.loop_mode[gid] = "off"
+        await interaction.response.send_message("▶️ Loop mode: **Off**")
+
 
 # run
 if __name__ == "__main__":

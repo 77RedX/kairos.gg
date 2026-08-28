@@ -34,11 +34,17 @@ def build_queue_embed(guild, current, queue, page):
     end = start + PAGE_SIZE
     chunk = queue[start:end]
 
-    # Clean formatting and title truncation so long names don't stretch the UI
+    # Clean formatting with source indicators
     desc = ""
-    for i, title in enumerate(chunk):
-        safe_title = title[:65] + "..." if len(title) > 65 else title
-        desc += f"`{(i + start + 1):02d}.` {safe_title}\n"
+    for i, item in enumerate(chunk):
+        # Support both old format (title string) and new format ((title, source_tag) tuple)
+        if isinstance(item, tuple):
+            title, source_tag = item
+        else:
+            title, source_tag = item, "🎵"
+
+        safe_title = title[:60] + "..." if len(title) > 60 else title
+        desc += f"`{(i + start + 1):02d}.` {source_tag} {safe_title}\n"
 
     embed.add_field(
         name=f"⏳ Up Next",
@@ -47,7 +53,7 @@ def build_queue_embed(guild, current, queue, page):
     )
 
     total_pages = max(1, (len(queue) - 1) // PAGE_SIZE + 1)
-    embed.set_footer(text=f"Page {page}/{total_pages} • {len(queue)} tracks in queue")
+    embed.set_footer(text=f"Page {page}/{total_pages} • {len(queue)} tracks in queue • 🎵 = Queued  🤖 = Autoplay")
 
     return embed
 
@@ -63,15 +69,15 @@ class QueueView(View):
         current, queue = self.queue_mgr.get_queue_snapshot(
             self.interaction.guild.id
         )
-        
+
         # Ensure page boundaries are respected if queue size shrinks
         max_page = max(1, (len(queue) - 1) // PAGE_SIZE + 1)
         self.page = min(self.page, max_page)
-        
+
         embed = build_queue_embed(
             self.interaction.guild, current, queue, self.page
         )
-        
+
         if current_interaction:
             await current_interaction.response.edit_message(embed=embed, view=self)
         else:
@@ -95,14 +101,21 @@ class QueueView(View):
 
         self.page = min(max_page, self.page + 1)
         await self.refresh(interaction)
-        
+
+    @button(label="🔀 Shuffle", style=discord.ButtonStyle.secondary)
+    async def shuffle_btn(self, interaction: discord.Interaction, _):
+        if interaction.user != self.interaction.user:
+            return await interaction.response.send_message("This isn't your menu!", ephemeral=True)
+        self.queue_mgr.shuffle(interaction.guild.id)
+        await self.refresh(interaction)
     @button(label="🔄 Refresh", style=discord.ButtonStyle.secondary)
     async def refresh_btn(self, interaction: discord.Interaction, _):
         # Anyone can hit refresh to see the latest queue!
         await self.refresh(interaction)
 
-    @button(label="🗑️", style=discord.ButtonStyle.danger)
-    async def close(self, interaction: discord.Interaction, _):
+    @button(label="🗑️ Clear", style=discord.ButtonStyle.danger)
+    async def clear_btn(self, interaction: discord.Interaction, _):
         if interaction.user != self.interaction.user:
             return await interaction.response.send_message("This isn't your menu!", ephemeral=True)
-        await interaction.message.delete()
+        self.queue_mgr.clear_queue(interaction.guild.id)
+        await self.refresh(interaction)

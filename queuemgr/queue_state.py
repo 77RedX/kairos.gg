@@ -6,6 +6,7 @@ class QueueState:
         self.history = {}
         self.current_track = {}
         self.stopped = set()
+        self.loop_mode = {}  # guild_id -> "off" | "track" | "queue"
 
     def user_q(self, gid):
         return self.user_queues.setdefault(gid, [])

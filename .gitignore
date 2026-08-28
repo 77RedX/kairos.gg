@@ -13,3 +13,5 @@ database/*.db
 migrate.py
 .agents/
 graphify-out/
+docs/
+cookies.txt

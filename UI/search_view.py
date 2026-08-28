@@ -10,7 +10,15 @@ class SearchDropdown(discord.ui.Select):
                 continue
             
             title = res.get('title', 'Unknown Title')[:95] 
-            uploader = res.get('uploader', 'Unknown Artist')[:95]
+            uploader = res.get('uploader', 'Unknown Artist')[:80]
+
+            # Format duration if available
+            duration = res.get('duration')
+            if duration:
+                mins, secs = divmod(int(duration), 60)
+                dur_str = f" • {mins}:{secs:02d}"
+            else:
+                dur_str = ""
             
             url = res.get('url')
             if url and not url.startswith('http'):
@@ -20,7 +28,7 @@ class SearchDropdown(discord.ui.Select):
 
             options.append(discord.SelectOption(
                 label=f"{i+1}. {title}",
-                description=f"By {uploader}",
+                description=f"By {uploader}{dur_str}"[:100],
                 value=url
             ))
 
